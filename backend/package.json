@@ -1,0 +1,44 @@
+{
+  "name": "@seaf/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "API REST do Sistema de Gestão e Acompanhamento de Tarefas da SEAF.",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "lint": "eslint .",
+    "test": "npm run prisma:generate && node --test",
+    "test:integration": "npm run prisma:generate && dotenv -e ../.env -- node --test test/integration/*.test.js",
+    "db:check": "dotenv -e ../.env -- node scripts/check-database.js",
+    "db:seed": "dotenv -e ../.env -- prisma db seed",
+    "db:migrate:deploy": "dotenv -e ../.env -- prisma migrate deploy",
+    "admin:bootstrap": "dotenv -e ../.env -- node scripts/bootstrap-admin.js",
+    "prisma:generate": "dotenv -e ../.env -- prisma generate",
+    "prisma:validate": "dotenv -e ../.env -- prisma validate"
+  },
+  "dependencies": {
+    "@prisma/adapter-mariadb": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "argon2": "^0.45.2",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.4",
+    "helmet": "^8.1.0",
+    "jose": "^6.2.17",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "dotenv-cli": "^11.0.0",
+    "eslint": "^10.14.0",
+    "globals": "^16.5.0",
+    "prisma": "7.10.1",
+    "supertest": "^7.1.4"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}

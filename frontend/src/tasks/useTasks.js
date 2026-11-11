@@ -1,0 +1,3 @@
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useCallback, useEffect, useState } from 'react';import { useAuth } from '../auth/AuthContext.jsx';
+export function useTasks(path){const{request}=useAuth();const[state,setState]=useState({loading:true,error:'',tasks:[],meta:null});const load=useCallback(async()=>{setState(s=>({...s,loading:true,error:''}));try{const response=await request(path);const json=await response.json();if(!response.ok)throw new Error(json.error?.message??'Não foi possível carregar as tarefas.');setState({loading:false,error:'',tasks:json.data.tasks,meta:json.meta})}catch(error){setState({loading:false,error:error.message,tasks:[],meta:null})}},[request,path]);useEffect(()=>{load()},[load]);return{...state,reload:load}}

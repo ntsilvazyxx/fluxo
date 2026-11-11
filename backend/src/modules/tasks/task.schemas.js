@@ -1,0 +1,12 @@
+import { z } from 'zod';
+const uuid = z.string().uuid(); const version = z.number().int().nonnegative(); const reason = z.string().trim().min(5).max(2000); const priorities = z.enum(['LOW','NORMAL','HIGH','URGENT']); const statuses = z.enum(['PENDING','AWAITING_ACCEPTANCE','IN_PROGRESS','COMPLETED','CANCELLED']);
+const empty = z.object({});
+export const listTasksSchema = z.object({ body: empty, params: empty, query: z.object({ page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(1).max(100).default(20), search: z.string().trim().max(255).optional(), teamId: uuid.optional(), responsibleId: uuid.optional(), priority: priorities.optional(), status: statuses.optional(), overdue: z.enum(['true','false']).optional(), deadlineFrom: z.coerce.date().optional(), deadlineTo: z.coerce.date().optional() }) });
+export const taskIdSchema = z.object({ body: empty, params: z.object({ id: uuid }), query: empty });
+export const createTaskSchema = z.object({ body: z.object({ teamId: uuid, title: z.string().trim().min(3).max(255), description: z.string().trim().min(3).max(10000), priority: priorities.default('NORMAL'), reason: reason.optional() }), params: empty, query: empty });
+export const updateTaskSchema = z.object({ body: z.object({ title: z.string().trim().min(3).max(255).optional(), description: z.string().trim().min(3).max(10000).optional(), priority: priorities.optional(), expectedVersion: version, reason }).refine((v)=>v.title!==undefined||v.description!==undefined||v.priority!==undefined,'Informe uma alteração.'), params: z.object({ id: uuid }), query: empty });
+export const assignTaskSchema = z.object({ body: z.object({ userId: uuid, deadlineAt: z.coerce.date(), expectedVersion: version, reason: reason.optional() }), params: z.object({ id: uuid }), query: empty });
+export const assignmentActionSchema = z.object({ body: z.object({ expectedVersion: version }), params: z.object({ id: uuid }), query: empty });
+export const rejectAssignmentSchema = z.object({ body: z.object({ expectedVersion: version, reason }), params: z.object({ id: uuid }), query: empty });
+export const completeTaskSchema = z.object({ body: z.object({ expectedVersion: version, completionText: z.string().trim().min(10).max(10000) }), params: z.object({ id: uuid }), query: empty });
+export const cancelTaskSchema = z.object({ body: z.object({ expectedVersion: version, reason }), params: z.object({ id: uuid }), query: empty });

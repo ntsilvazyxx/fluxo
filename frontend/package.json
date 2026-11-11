@@ -1,0 +1,38 @@
+{
+  "name": "@seaf/frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Interface web do Sistema de Gestão e Acompanhamento de Tarefas da SEAF.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "lucide-react": "^0.553.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.9.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@tailwindcss/vite": "^4.3.5",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "eslint": "^10.14.0",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "jsdom": "^27.2.0",
+    "tailwindcss": "^4.3.5",
+    "vite": "^8.3.8",
+    "vitest": "^4.0.14"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}

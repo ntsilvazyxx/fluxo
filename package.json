@@ -1,0 +1,33 @@
+{
+  "name": "seaf-gestao-tarefas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Base técnica do Sistema de Gestão e Acompanhamento de Tarefas da SEAF.",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently -n API,WEB -c blue,cyan \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:backend": "npm run dev --workspace backend",
+    "dev:frontend": "npm run dev --workspace frontend",
+    "build": "npm run build --workspace frontend",
+    "lint": "npm run lint --workspaces",
+    "test": "npm run test --workspaces",
+    "check": "npm run lint && npm run test && npm run build && npm run prisma:validate",
+    "prisma:generate": "npm run prisma:generate --workspace backend",
+    "prisma:validate": "npm run prisma:validate --workspace backend",
+    "db:seed": "npm run db:seed --workspace backend",
+    "db:check": "npm run db:check --workspace backend",
+    "db:migrate:deploy": "npm run db:migrate:deploy --workspace backend",
+    "test:integration": "npm run test:integration --workspace backend"
+    ,"admin:bootstrap": "npm run admin:bootstrap --workspace backend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
+  "engines": {
+    "node": ">=20.19.0",
+    "npm": ">=10.0.0"
+  }
+}

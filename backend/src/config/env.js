@@ -1,0 +1,72 @@
+import dotenv from 'dotenv';
+
+dotenv.config({ path: new URL('../../../.env', import.meta.url), quiet: true });
+
+const parsePort = (value) => {
+  const port = Number(value ?? 3001);
+
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error('PORT deve ser um número inteiro entre 1 e 65535.');
+  }
+
+  return port;
+};
+
+const parseOrigins = (value) =>
+  (value ?? 'http://localhost:5173')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+const parsePositiveInteger = (name, value, fallback) => {
+  const parsed = Number(value ?? fallback);
+
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} deve ser um número inteiro positivo.`);
+  }
+
+  return parsed;
+};
+
+const required = (name) => {
+  const value = process.env[name];
+
+  if (!value) {
+    throw new Error(`${name} deve ser definida no ambiente.`);
+  }
+
+  return value;
+};
+
+export const env = Object.freeze({
+  nodeEnv: process.env.NODE_ENV ?? 'development',
+  port: parsePort(process.env.PORT),
+  corsOrigins: parseOrigins(process.env.CORS_ORIGINS),
+  jwtAccessSecret: required('JWT_ACCESS_SECRET'),
+  accessTokenTtlSeconds: parsePositiveInteger(
+    'ACCESS_TOKEN_TTL_SECONDS',
+    process.env.ACCESS_TOKEN_TTL_SECONDS,
+    900,
+  ),
+  refreshTokenTtlDays: parsePositiveInteger(
+    'REFRESH_TOKEN_TTL_DAYS',
+    process.env.REFRESH_TOKEN_TTL_DAYS,
+    30,
+  ),
+  passwordResetTtlMinutes: parsePositiveInteger(
+    'PASSWORD_RESET_TTL_MINUTES',
+    process.env.PASSWORD_RESET_TTL_MINUTES,
+    30,
+  ),
+  loginWindowMinutes: parsePositiveInteger(
+    'LOGIN_RATE_WINDOW_MINUTES',
+    process.env.LOGIN_RATE_WINDOW_MINUTES,
+    15,
+  ),
+  loginMaxAttempts: parsePositiveInteger(
+    'LOGIN_RATE_MAX_ATTEMPTS',
+    process.env.LOGIN_RATE_MAX_ATTEMPTS,
+    10,
+  ),
+  cookieSecure: process.env.COOKIE_SECURE === '1',
+});

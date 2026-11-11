@@ -1,0 +1,566 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum RoleCode {
+  ADMIN_MASTER
+  SECRETARY
+  MANAGER
+  TECHNICIAN
+}
+
+enum TaskCycleStatus {
+  PENDING
+  AWAITING_ACCEPTANCE
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum AssignmentEndReason {
+  REJECTED
+  REASSIGNED
+  RETURN_APPROVED
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskRequestType {
+  RETURN
+  EXTENSION
+}
+
+enum TaskRequestStatus {
+  PENDING
+  APPROVED
+  DENIED
+  CLOSED_BY_COMPLETION
+  CLOSED_BY_ADMIN_CHANGE
+  CLOSED_BY_REASSIGNMENT
+  CLOSED_BY_CANCELLATION
+}
+
+enum CalendarExceptionType {
+  HOLIDAY
+  WORKING_PERIOD
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+enum EmailDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum IdempotencyState {
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum MfaCredentialType {
+  TOTP
+  WEBAUTHN
+}
+
+model Role {
+  id        String   @id @db.Char(36)
+  code      RoleCode @unique
+  label     String   @db.VarChar(80)
+  createdAt DateTime @default(now()) @db.DateTime(3)
+  updatedAt DateTime @updatedAt @db.DateTime(3)
+  users     User[]
+
+  @@map("roles")
+}
+
+model User {
+  id                      String                   @id @db.Char(36)
+  name                    String                   @db.VarChar(160)
+  emailNormalized         String                   @unique @db.VarChar(254)
+  passwordHash            String                   @db.VarChar(255)
+  roleId                  String                   @db.Char(36)
+  isActive                Boolean                  @default(true)
+  version                 Int                      @default(0) @db.UnsignedInt
+  createdAt               DateTime                 @default(now()) @db.DateTime(3)
+  updatedAt               DateTime                 @updatedAt @db.DateTime(3)
+  deletedAt               DateTime?                @db.DateTime(3)
+  role                    Role                     @relation(fields: [roleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  memberships             TeamMember[]
+  managedTeams            TeamManager[]
+  createdTasks            Task[]                   @relation("TaskCreator")
+  assignments             TaskAssignment[]         @relation("AssignmentResponsible")
+  assignmentsCreated      TaskAssignment[]         @relation("AssignmentAuthor")
+  requestsDecided         TaskRequest[]            @relation("RequestDecider")
+  deadlineChanges         DeadlineChange[]         @relation("DeadlineChangeAuthor")
+  imagesUploaded          TaskImage[]              @relation("TaskImageUploader")
+  cycleNotes              TaskCycleNote[]          @relation("TaskCycleNoteAuthor")
+  calendarVersionsCreated CalendarVersion[]        @relation("CalendarVersionAuthor")
+  auditEvents             AuditEvent[]             @relation("AuditActor")
+  notifications           Notification[]
+  idempotencyKeys         IdempotencyKey[]
+  sessions                UserSession[]
+  passwordResetTokens     PasswordResetToken[]
+  mfaCredentials          MfaCredential[]
+  notificationPreferences NotificationPreference[]
+  settingsUpdated         SystemSetting[]          @relation("SystemSettingUpdater")
+
+  @@index([roleId, isActive])
+  @@index([name])
+  @@map("users")
+}
+
+model Team {
+  id            String        @id @db.Char(36)
+  name          String        @db.VarChar(160)
+  isActive      Boolean       @default(true)
+  calendarId    String?       @unique @db.Char(36)
+  version       Int           @default(0) @db.UnsignedInt
+  createdAt     DateTime      @default(now()) @db.DateTime(3)
+  updatedAt     DateTime      @updatedAt @db.DateTime(3)
+  calendar      WorkCalendar? @relation("TeamCalendarPointer", fields: [calendarId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  ownedCalendar WorkCalendar? @relation("CalendarTeamOwner")
+  memberships   TeamMember[]
+  managers      TeamManager[]
+  tasks         Task[]
+
+  @@index([isActive, name])
+  @@map("teams")
+}
+
+model TeamMember {
+  id        String    @id @db.Char(36)
+  teamId    String    @db.Char(36)
+  userId    String    @db.Char(36)
+  joinedAt  DateTime  @db.DateTime(3)
+  leftAt    DateTime? @db.DateTime(3)
+  createdAt DateTime  @default(now()) @db.DateTime(3)
+  team      Team      @relation(fields: [teamId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([teamId, leftAt])
+  @@index([userId, leftAt])
+  @@map("team_members")
+}
+
+model TeamManager {
+  id         String    @id @db.Char(36)
+  teamId     String    @db.Char(36)
+  userId     String    @db.Char(36)
+  assignedAt DateTime  @db.DateTime(3)
+  endedAt    DateTime? @db.DateTime(3)
+  createdAt  DateTime  @default(now()) @db.DateTime(3)
+  team       Team      @relation(fields: [teamId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([teamId, endedAt])
+  @@index([userId, endedAt])
+  @@map("team_managers")
+}
+
+model WorkCalendar {
+  id              String            @id @db.Char(36)
+  teamId          String            @unique @db.Char(36)
+  timezone        String            @db.VarChar(64)
+  activeVersionId String?           @unique @db.Char(36)
+  version         Int               @default(0) @db.UnsignedInt
+  createdAt       DateTime          @default(now()) @db.DateTime(3)
+  updatedAt       DateTime          @updatedAt @db.DateTime(3)
+  team            Team              @relation("CalendarTeamOwner", fields: [teamId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  selectedByTeam  Team?             @relation("TeamCalendarPointer")
+  activeVersion   CalendarVersion?  @relation("CalendarActiveVersion", fields: [activeVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  versions        CalendarVersion[] @relation("CalendarVersions")
+
+  @@map("work_calendars")
+}
+
+model CalendarVersion {
+  id                String              @id @db.Char(36)
+  calendarId        String              @db.Char(36)
+  versionNumber     Int                 @db.UnsignedInt
+  effectiveFrom     DateTime            @db.DateTime(3)
+  effectiveTo       DateTime?           @db.DateTime(3)
+  publishedAt       DateTime?           @db.DateTime(3)
+  createdById       String              @db.Char(36)
+  createdAt         DateTime            @default(now()) @db.DateTime(3)
+  calendar          WorkCalendar        @relation("CalendarVersions", fields: [calendarId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  activeForCalendar WorkCalendar?       @relation("CalendarActiveVersion")
+  createdBy         User                @relation("CalendarVersionAuthor", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  schedules         WorkSchedule[]
+  exceptions        CalendarException[]
+  assignments       TaskAssignment[]
+
+  @@unique([calendarId, versionNumber])
+  @@unique([id, calendarId])
+  @@index([calendarId, effectiveFrom, effectiveTo])
+  @@map("calendar_versions")
+}
+
+model WorkSchedule {
+  id                String          @id @db.Char(36)
+  calendarVersionId String          @db.Char(36)
+  weekday           Int             @db.UnsignedTinyInt
+  startMinute       Int             @db.UnsignedSmallInt
+  endMinute         Int             @db.UnsignedSmallInt
+  calendarVersion   CalendarVersion @relation(fields: [calendarVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([calendarVersionId, weekday, startMinute, endMinute])
+  @@index([calendarVersionId, weekday])
+  @@map("work_schedules")
+}
+
+model CalendarException {
+  id                String                @id @db.Char(36)
+  calendarVersionId String                @db.Char(36)
+  localDate         DateTime              @db.Date
+  type              CalendarExceptionType
+  startMinute       Int?                  @db.UnsignedSmallInt
+  endMinute         Int?                  @db.UnsignedSmallInt
+  description       String?               @db.VarChar(255)
+  calendarVersion   CalendarVersion       @relation(fields: [calendarVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([calendarVersionId, localDate])
+  @@map("calendar_exceptions")
+}
+
+model Task {
+  id             String      @id @db.Char(36)
+  publicNumber   BigInt      @unique @default(autoincrement()) @db.UnsignedBigInt
+  teamId         String      @db.Char(36)
+  createdById    String      @db.Char(36)
+  parentCycleId  String?     @db.Char(36)
+  currentCycleId String?     @unique @db.Char(36)
+  version        Int         @default(0) @db.UnsignedInt
+  createdAt      DateTime    @default(now()) @db.DateTime(3)
+  updatedAt      DateTime    @updatedAt @db.DateTime(3)
+  deletedAt      DateTime?   @db.DateTime(3)
+  team           Team        @relation(fields: [teamId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy      User        @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  parentCycle    TaskCycle?  @relation("CycleSubtasks", fields: [parentCycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  currentCycle   TaskCycle?  @relation("TaskCurrentCycle", fields: [currentCycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  cycles         TaskCycle[] @relation("TaskCycles")
+
+  @@index([teamId, deletedAt])
+  @@index([createdById])
+  @@index([parentCycleId])
+  @@map("tasks")
+}
+
+model TaskCycle {
+  id              String           @id @db.Char(36)
+  taskId          String           @db.Char(36)
+  cycleNumber     Int              @db.UnsignedInt
+  title           String           @db.VarChar(255)
+  description     String           @db.Text
+  priority        TaskPriority     @default(NORMAL)
+  status          TaskCycleStatus  @default(PENDING)
+  deadlineAt      DateTime?        @db.DateTime(3)
+  version         Int              @default(0) @db.UnsignedInt
+  openedAt        DateTime         @db.DateTime(3)
+  closedAt        DateTime?        @db.DateTime(3)
+  completionText  String?          @db.Text
+  createdAt       DateTime         @default(now()) @db.DateTime(3)
+  updatedAt       DateTime         @updatedAt @db.DateTime(3)
+  task            Task             @relation("TaskCycles", fields: [taskId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  currentForTask  Task?            @relation("TaskCurrentCycle")
+  subtasks        Task[]           @relation("CycleSubtasks")
+  assignments     TaskAssignment[]
+  requests        TaskRequest[]
+  deadlineChanges DeadlineChange[]
+  images          TaskImage[]
+  notes           TaskCycleNote[]
+
+  @@unique([taskId, cycleNumber])
+  @@unique([id, taskId])
+  @@index([status, deadlineAt])
+  @@index([priority, status])
+  @@map("task_cycles")
+}
+
+model TaskAssignment {
+  id                String               @id @db.Char(36)
+  cycleId           String               @db.Char(36)
+  userId            String               @db.Char(36)
+  assignedById      String               @db.Char(36)
+  calendarVersionId String               @db.Char(36)
+  assignedAt        DateTime             @db.DateTime(3)
+  acceptedAt        DateTime?            @db.DateTime(3)
+  endedAt           DateTime?            @db.DateTime(3)
+  endReason         AssignmentEndReason?
+  createdAt         DateTime             @default(now()) @db.DateTime(3)
+  cycle             TaskCycle            @relation(fields: [cycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user              User                 @relation("AssignmentResponsible", fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  assignedBy        User                 @relation("AssignmentAuthor", fields: [assignedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  calendarVersion   CalendarVersion      @relation(fields: [calendarVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  requests          TaskRequest[]
+  pauseIntervals    TaskPauseInterval[]
+
+  @@unique([id, cycleId])
+  @@index([cycleId, endedAt])
+  @@index([userId, endedAt])
+  @@index([calendarVersionId])
+  @@map("task_assignments")
+}
+
+model TaskRequest {
+  id                 String              @id @db.Char(36)
+  cycleId            String              @db.Char(36)
+  assignmentId       String              @db.Char(36)
+  type               TaskRequestType
+  status             TaskRequestStatus   @default(PENDING)
+  reason             String              @db.Text
+  proposedDeadlineAt DateTime?           @db.DateTime(3)
+  decidedById        String?             @db.Char(36)
+  decidedAt          DateTime?           @db.DateTime(3)
+  decisionReason     String?             @db.Text
+  createdAt          DateTime            @default(now()) @db.DateTime(3)
+  updatedAt          DateTime            @updatedAt @db.DateTime(3)
+  cycle              TaskCycle           @relation(fields: [cycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  assignment         TaskAssignment      @relation(fields: [assignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  decidedBy          User?               @relation("RequestDecider", fields: [decidedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  pauseIntervals     TaskPauseInterval[]
+
+  @@index([assignmentId, type, status])
+  @@index([cycleId, status])
+  @@index([decidedById])
+  @@map("task_requests")
+}
+
+model TaskPauseInterval {
+  id           String         @id @db.Char(36)
+  assignmentId String         @db.Char(36)
+  requestId    String         @db.Char(36)
+  startedAt    DateTime       @db.DateTime(3)
+  endedAt      DateTime?      @db.DateTime(3)
+  createdAt    DateTime       @default(now()) @db.DateTime(3)
+  assignment   TaskAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  request      TaskRequest    @relation(fields: [requestId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([requestId, startedAt])
+  @@index([assignmentId, endedAt])
+  @@map("task_pause_intervals")
+}
+
+model DeadlineChange {
+  id            String    @id @db.Char(36)
+  cycleId       String    @db.Char(36)
+  oldDeadlineAt DateTime? @db.DateTime(3)
+  newDeadlineAt DateTime  @db.DateTime(3)
+  reason        String    @db.Text
+  changedById   String    @db.Char(36)
+  createdAt     DateTime  @default(now()) @db.DateTime(3)
+  cycle         TaskCycle @relation(fields: [cycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  changedBy     User      @relation("DeadlineChangeAuthor", fields: [changedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([cycleId, createdAt])
+  @@index([changedById])
+  @@map("deadline_changes")
+}
+
+model TaskImage {
+  id           String    @id @db.Char(36)
+  cycleId      String    @db.Char(36)
+  uploadedById String    @db.Char(36)
+  storageKey   String    @unique @db.VarChar(512)
+  mimeType     String    @db.VarChar(100)
+  sizeBytes    BigInt    @db.UnsignedBigInt
+  checksum     String    @db.Char(64)
+  createdAt    DateTime  @default(now()) @db.DateTime(3)
+  deletedAt    DateTime? @db.DateTime(3)
+  cycle        TaskCycle @relation(fields: [cycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  uploadedBy   User      @relation("TaskImageUploader", fields: [uploadedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([cycleId, deletedAt])
+  @@index([uploadedById])
+  @@map("task_images")
+}
+
+model TaskCycleNote {
+  id        String    @id @db.Char(36)
+  cycleId   String    @db.Char(36)
+  authorId  String    @db.Char(36)
+  content   String    @db.Text
+  reason    String    @db.Text
+  createdAt DateTime  @default(now()) @db.DateTime(3)
+  cycle     TaskCycle @relation(fields: [cycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  author    User      @relation("TaskCycleNoteAuthor", fields: [authorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([cycleId, createdAt])
+  @@index([authorId])
+  @@map("task_cycle_notes")
+}
+
+model AuditEvent {
+  id            String   @id @db.Char(36)
+  actorId       String?  @db.Char(36)
+  entityType    String   @db.VarChar(100)
+  entityId      String   @db.Char(36)
+  action        String   @db.VarChar(100)
+  beforeJson    Json?
+  afterJson     Json?
+  reason        String?  @db.Text
+  correlationId String   @db.Char(36)
+  createdAt     DateTime @default(now()) @db.DateTime(3)
+  actor         User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([correlationId])
+  @@map("audit_events")
+}
+
+model Notification {
+  id         String    @id @db.Char(36)
+  userId     String    @db.Char(36)
+  type       String    @db.VarChar(100)
+  title      String    @db.VarChar(180)
+  body       String    @db.Text
+  entityType String    @db.VarChar(100)
+  entityId   String    @db.Char(36)
+  readAt     DateTime? @db.DateTime(3)
+  createdAt  DateTime  @default(now()) @db.DateTime(3)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([userId, readAt, createdAt])
+  @@index([entityType, entityId])
+  @@map("notifications")
+}
+
+model OutboxEvent {
+  id            String          @id @db.Char(36)
+  eventType     String          @db.VarChar(120)
+  payloadJson   Json
+  dedupeKey     String          @unique @db.VarChar(255)
+  status        OutboxStatus    @default(PENDING)
+  attempts      Int             @default(0) @db.UnsignedInt
+  nextAttemptAt DateTime?       @db.DateTime(3)
+  claimedAt     DateTime?       @db.DateTime(3)
+  processedAt   DateTime?       @db.DateTime(3)
+  lastError     String?         @db.Text
+  createdAt     DateTime        @default(now()) @db.DateTime(3)
+  updatedAt     DateTime        @updatedAt @db.DateTime(3)
+  deliveries    EmailDelivery[]
+
+  @@index([status, nextAttemptAt, createdAt])
+  @@map("outbox_events")
+}
+
+model EmailDelivery {
+  id            String              @id @db.Char(36)
+  outboxEventId String              @db.Char(36)
+  recipient     String              @db.VarChar(254)
+  status        EmailDeliveryStatus @default(PENDING)
+  attemptCount  Int                 @default(0) @db.UnsignedInt
+  lastError     String?             @db.Text
+  sentAt        DateTime?           @db.DateTime(3)
+  createdAt     DateTime            @default(now()) @db.DateTime(3)
+  updatedAt     DateTime            @updatedAt @db.DateTime(3)
+  outboxEvent   OutboxEvent         @relation(fields: [outboxEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([outboxEventId, recipient])
+  @@index([status, createdAt])
+  @@map("email_deliveries")
+}
+
+model IdempotencyKey {
+  id               String           @id @db.Char(36)
+  actorId          String           @db.Char(36)
+  key              String           @db.VarChar(255)
+  requestHash      String           @db.Char(64)
+  responseStatus   Int?             @db.UnsignedSmallInt
+  responseBodyJson Json?
+  state            IdempotencyState @default(PROCESSING)
+  expiresAt        DateTime         @db.DateTime(3)
+  createdAt        DateTime         @default(now()) @db.DateTime(3)
+  updatedAt        DateTime         @updatedAt @db.DateTime(3)
+  actor            User             @relation(fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([actorId, key])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}
+
+model UserSession {
+  id               String    @id @db.Char(36)
+  userId           String    @db.Char(36)
+  refreshTokenHash String    @unique @db.Char(64)
+  createdAt        DateTime  @default(now()) @db.DateTime(3)
+  expiresAt        DateTime  @db.DateTime(3)
+  revokedAt        DateTime? @db.DateTime(3)
+  user             User      @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([userId, revokedAt, expiresAt])
+  @@map("user_sessions")
+}
+
+model PasswordResetToken {
+  id        String    @id @db.Char(36)
+  userId    String    @db.Char(36)
+  tokenHash String    @unique @db.Char(64)
+  createdAt DateTime  @default(now()) @db.DateTime(3)
+  expiresAt DateTime  @db.DateTime(3)
+  usedAt    DateTime? @db.DateTime(3)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([userId, expiresAt])
+  @@map("password_reset_tokens")
+}
+
+model MfaCredential {
+  id               String            @id @db.Char(36)
+  userId           String            @db.Char(36)
+  type             MfaCredentialType
+  credentialId     String?           @unique @db.VarChar(512)
+  secretCiphertext String?           @db.Text
+  credentialJson   Json?
+  createdAt        DateTime          @default(now()) @db.DateTime(3)
+  lastUsedAt       DateTime?         @db.DateTime(3)
+  revokedAt        DateTime?         @db.DateTime(3)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([userId, revokedAt])
+  @@map("mfa_credentials")
+}
+
+model NotificationPreference {
+  id               String  @id @db.Char(36)
+  userId           String  @db.Char(36)
+  notificationType String  @db.VarChar(100)
+  internalEnabled  Boolean @default(true)
+  emailEnabled     Boolean @default(true)
+  user             User    @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([userId, notificationType])
+  @@map("notification_preferences")
+}
+
+model SystemSetting {
+  key         String   @id @db.VarChar(100)
+  valueJson   Json
+  description String?  @db.VarChar(255)
+  version     Int      @default(0) @db.UnsignedInt
+  updatedById String?  @db.Char(36)
+  createdAt   DateTime @default(now()) @db.DateTime(3)
+  updatedAt   DateTime @updatedAt @db.DateTime(3)
+  updatedBy   User?    @relation("SystemSettingUpdater", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([updatedById])
+  @@map("system_settings")
+}

@@ -1,0 +1,177 @@
+# SEAF — Sistema de Gestão e Acompanhamento de Tarefas
+
+Base técnica do sistema institucional para gestão de tarefas administrativas da Secretaria de Estado de Agricultura Familiar de Mato Grosso.
+
+> Estado atual: **Fase 3 — Gestão de Tarefas e Kanban**. Solicitações, calendários avançados, imagens, e-mails reais e dashboard analítico permanecem nas fases futuras.
+
+## Stack
+
+- Frontend: React + Vite, JavaScript/JSX e Tailwind CSS, com abordagem mobile-first.
+- Backend: Node.js + Express, JavaScript ESM e arquitetura de monólito modular.
+- Persistência em MariaDB 10.11 + Prisma ORM.
+- Workspaces npm para executar e validar as duas aplicações pela raiz.
+
+## Pré-requisitos
+
+- Node.js 20.19 ou superior.
+- npm 10 ou superior.
+- MariaDB 10.11 ou superior.
+
+## Instalação
+
+Na raiz do repositório:
+
+```bash
+npm install
+```
+
+Crie o arquivo de ambiente local a partir do exemplo:
+
+PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Linux/macOS:
+
+```bash
+cp .env.example .env
+```
+
+O valor de `DATABASE_URL` no exemplo é fictício. Ajuste-o somente no `.env` local, que é ignorado pelo Git. Nenhuma credencial real deve ser adicionada ao `.env.example`.
+
+## Desenvolvimento
+
+Inicie frontend e backend em paralelo:
+
+```bash
+npm run dev
+```
+
+Serviços locais:
+
+- Interface: `http://localhost:5173`
+- API: `http://localhost:3001/api/v1`
+- Health check: `http://localhost:3001/api/v1/health`
+
+Também é possível iniciar cada aplicação separadamente:
+
+```bash
+npm run dev:frontend
+npm run dev:backend
+```
+
+## Validações
+
+Execute todas as verificações que não exigem conexão MySQL:
+
+```bash
+npm run check
+```
+
+Ou execute cada etapa isoladamente:
+
+```bash
+npm run lint
+npm run test
+npm run build
+npm run prisma:validate
+```
+
+O Prisma está configurado para MariaDB 10.11 e possui migrações versionadas. O datasource Prisma continua usando `provider = "mysql"`, como previsto pelo conector oficial.
+
+## Persistência e migrações
+
+Configure no `.env` um banco de desenvolvimento MariaDB 10.11 vazio ou já controlado pelo projeto. Antes de aplicar, confira o nome do banco e faça backup quando houver dados existentes.
+
+```bash
+npm run prisma:validate
+npm run prisma:generate
+npm run db:check
+npm run db:migrate:deploy
+npm run db:seed
+```
+
+O seed é idempotente e contém somente os perfis `ADMIN_MASTER`, `SECRETARY`, `MANAGER` e `TECHNICIAN`.
+
+Nunca use `prisma db push` como substituto das migrações. Os scripts não executam reset automático.
+
+### Testes MariaDB reais
+
+Use um banco descartável cujo nome contenha `test`, aplique as migrações e o seed, e então habilite explicitamente a suíte:
+
+```powershell
+$env:RUN_DATABASE_INTEGRATION='1'
+$env:TEST_DATABASE_URL='mysql://usuario:senha@127.0.0.1:3306/seaf_tasks_test'
+npm run test:integration
+```
+
+A suíte recusa servidores que não se identifiquem como MariaDB 10.11.x. Quando a flag não está ativa, os testes de banco aparecem como ignorados, nunca como aprovados.
+
+## Scripts principais
+
+| Script | Finalidade |
+|---|---|
+| `npm run dev` | Executa API e interface com recarga automática. |
+| `npm run build` | Gera a versão de produção do frontend. |
+| `npm run lint` | Verifica JavaScript e JSX dos dois workspaces. |
+| `npm run test` | Executa testes da API, interface e persistência sem banco real. |
+| `npm run prisma:validate` | Valida a configuração e o schema Prisma. |
+| `npm run prisma:generate` | Gera o Prisma Client quando houver modelos. |
+| `npm run check` | Executa lint, testes, build e validação Prisma. |
+| `npm run db:migrate:deploy` | Aplica somente migrações versionadas no banco configurado. |
+| `npm run db:check` | Lê versão/destino e confirma MariaDB 10.11 sem alterar dados. |
+| `npm run db:seed` | Sincroniza os quatro perfis institucionais. |
+| `npm run test:integration` | Executa integridade e concorrência em MariaDB 10.11 real. |
+
+## Estrutura
+
+```text
+.
+├── backend/
+│   ├── prisma/                 # configuração inicial do Prisma
+│   │   ├── migrations/         # migrações Prisma e SQL complementar
+│   │   └── seed.js             # seed idempotente de perfis
+│   ├── src/
+│   │   ├── config/             # ambiente da API
+│   │   ├── infrastructure/     # client Prisma e transações
+│   │   ├── middlewares/        # tratamento HTTP transversal
+│   │   ├── modules/health/     # módulo operacional de saúde
+│   │   └── routes/             # composição das rotas /api/v1
+│   └── test/                   # testes unitários e integração MariaDB
+├── frontend/
+│   └── src/
+│       ├── styles/             # Tailwind e tokens do Design System SEAF
+│       └── test/               # configuração de testes da interface
+├── docs/
+│   ├── IMPLEMENTATION-DECISIONS.md
+│   ├── PERSISTENCE-ERD.md
+│   └── sdds/                   # contratos de arquitetura e negócio
+├── .env.example
+└── package.json                # workspaces e scripts do projeto
+```
+
+## Contratos do projeto
+
+- Os SDDs em `docs/sdds/docs/` são contratos e devem ser lidos na ordem 01–12 antes das próximas fases.
+- Decisões técnicas reversíveis são registradas em `docs/IMPLEMENTATION-DECISIONS.md`.
+- A logomarca original em `docs/sdds/assets/logomarca-seaf-original.png` é utilizada sem modificação.
+- Não executar deploy, introduzir TypeScript ou antecipar regras de negócio sem autorização.
+
+## Fase 2 — Autenticação e acesso
+
+O access token permanece somente em memória no frontend. O refresh token usa cookie `HttpOnly` e `SameSite=Strict`. Gere um valor aleatório forte para `JWT_ACCESS_SECRET` no `.env` local.
+
+Não existe senha administrativa padrão. Na primeira instalação, defina temporariamente `SEAF_BOOTSTRAP_ADMIN_NAME`, `SEAF_BOOTSTRAP_ADMIN_EMAIL` e `SEAF_BOOTSTRAP_ADMIN_PASSWORD` e execute `npm run admin:bootstrap`. O comando recusa uma segunda conta ADMIN MASTER.
+
+Rotas da fase: `/api/v1/auth/*`, `/api/v1/users/*` e `/api/v1/teams/*`. Usuários e equipes exigem Bearer token e autorização obrigatória no backend.
+
+## Fase 3 — Tarefas e Kanban
+
+O módulo operacional oferece criação e edição controladas, atribuição e reatribuição, aceite, rejeição, conclusão, cancelamento, Kanban, Minhas Tarefas e histórico. Atraso é calculado a partir do prazo; não é persistido como estado.
+
+Mutações críticas exigem `Idempotency-Key`. Edições e transições recebem `expectedVersion`; conflitos retornam HTTP 409 sem sobrescrever alterações concorrentes.
+
+Principais rotas: `/api/v1/tasks`, `/api/v1/tasks/:id`, `/api/v1/tasks/:id/assignments`, `/api/v1/assignments/:id/accept`, `/api/v1/assignments/:id/reject`, `/api/v1/tasks/:id/complete`, `/api/v1/tasks/:id/cancel`, `/api/v1/kanban`, `/api/v1/my-tasks` e `/api/v1/task-history`.
+
