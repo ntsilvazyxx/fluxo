@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { TaskLifecyclePanel } from '../tasks/TaskLifecyclePanel.jsx';
+import { ImageGalleryPanel } from '../tasks/ImageGalleryPanel.jsx';
 import { PriorityBadge, StatusBadge } from '../tasks/task-ui.jsx';
 
 const key = () => crypto.randomUUID();
@@ -65,6 +66,7 @@ export function TaskDetailPage() {
     {error && <p role="alert" className="mt-5 rounded-xl bg-red-50 p-3 text-danger">{error}</p>}
     {currentAssignment?.metrics && <Metrics metrics={currentAssignment.metrics} />}
     <TaskLifecyclePanel task={task} cycle={currentCycle} users={users} canManage={canManage} busy={busy} mutate={mutate} />
+    <ImageGalleryPanel taskId={task.id} cycleVersion={currentCycle.version} />
 
     <div className="mt-6 grid gap-5 lg:grid-cols-2">
       {own && currentCycle.status === 'AWAITING_ACCEPTANCE' && <Action title="Responder atribuição"><button disabled={busy} onClick={() => mutate(`/assignments/${currentAssignment.id}/accept`, { expectedVersion: currentCycle.version })} className="action-primary"><Check size={18} />Aceitar tarefa</button><ReasonAction label="Rejeitar atribuição" danger busy={busy} onSubmit={(reason) => mutate(`/assignments/${currentAssignment.id}/reject`, { expectedVersion: currentCycle.version, reason })} /></Action>}

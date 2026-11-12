@@ -8,6 +8,7 @@ import { createAssignmentRouter, createTaskQueryRouters, createTaskRouter } from
 import { createCalendarRouter } from '../modules/calendars/calendar.routes.js';
 import { createRequestRouter, createTaskRequestRouter } from '../modules/requests/request.routes.js';
 import { createSubtaskRouter } from '../modules/subtasks/subtask.routes.js';
+import { createImageRouter, createTaskImageRouter } from '../modules/images/image.routes.js';
 
 export const createApiRouter = (dependencies) => {
   const apiRouter = Router();
@@ -35,5 +36,7 @@ apiRouter.use('/health', healthRouter);
   apiRouter.use('/calendars', createCalendarRouter(dependencies));
   apiRouter.use('/tasks', createTaskRequestRouter(dependencies));
   apiRouter.use('/requests', createRequestRouter(dependencies));
+  apiRouter.use('/tasks', createTaskImageRouter(dependencies));
+  apiRouter.use('/images', createImageRouter(dependencies));
   return apiRouter;
 };

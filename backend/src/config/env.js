@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import { fileURLToPath } from 'node:url';
 
 dotenv.config({ path: new URL('../../../.env', import.meta.url), quiet: true });
 
@@ -69,4 +70,7 @@ export const env = Object.freeze({
     10,
   ),
   cookieSecure: process.env.COOKIE_SECURE === '1',
+  imageStoragePath:
+    process.env.IMAGE_STORAGE_PATH ??
+    fileURLToPath(new URL('../../storage/images', import.meta.url)),
 });

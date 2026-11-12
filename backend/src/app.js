@@ -10,7 +10,12 @@ import { errorHandler } from './middlewares/error-handler.js';
 import { notFound } from './middlewares/not-found.js';
 import { createApiRouter } from './routes/index.js';
 
-export const createApp = ({ prisma = createPrismaClient(), config = env, passwordResetNotifier = async () => {} } = {}) => {
+export const createApp = ({
+  prisma = createPrismaClient(),
+  config = env,
+  passwordResetNotifier = async () => {},
+  imageStorage,
+} = {}) => {
   const app = express();
 
   app.disable('x-powered-by');
@@ -32,7 +37,7 @@ export const createApp = ({ prisma = createPrismaClient(), config = env, passwor
   app.use(cookieParser());
   app.use(express.json({ limit: '1mb' }));
 
-  app.use('/api/v1', createApiRouter({ prisma, config, passwordResetNotifier }));
+  app.use('/api/v1', createApiRouter({ prisma, config, passwordResetNotifier, imageStorage }));
   app.use(notFound);
   app.use(errorHandler);
 
