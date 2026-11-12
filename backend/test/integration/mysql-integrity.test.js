@@ -244,6 +244,7 @@ describe('integridade no MariaDB 10.11 real', { skip: !integrationEnabled }, () 
           calendarId: calendarVersion.calendarId,
           versionNumber: 2,
           effectiveFrom: new Date('2026-06-01T00:00:00.000Z'),
+          publishedAt: new Date('2026-06-01T00:00:00.000Z'),
           createdById: author.id,
         },
       }),

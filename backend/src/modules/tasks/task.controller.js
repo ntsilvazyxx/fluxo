@@ -18,4 +18,6 @@ export const createTaskController = ({ service }) => ({
   reject: async (req,res)=>sendMutation(res,service.reject(req,req.validated.params.id,req.validated.body,requireIdempotencyKey(req))),
   complete: async (req,res)=>sendMutation(res,service.complete(req,req.validated.params.id,req.validated.body,requireIdempotencyKey(req))),
   cancel: async (req,res)=>sendMutation(res,service.cancel(req,req.validated.params.id,req.validated.body,requireIdempotencyKey(req))),
+  reopen: async (req,res)=>sendMutation(res,service.reopen(req,req.validated.params.id,req.validated.body,requireIdempotencyKey(req))),
+  restore: async (req,res)=>sendMutation(res,service.restore(req,req.validated.params.id,req.validated.body,requireIdempotencyKey(req))),
 });

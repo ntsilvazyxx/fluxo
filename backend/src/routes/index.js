@@ -5,6 +5,9 @@ import { createAuthRouter } from '../modules/auth/auth.routes.js';
 import { createTeamRouter } from '../modules/teams/team.routes.js';
 import { createUserRouter } from '../modules/users/user.routes.js';
 import { createAssignmentRouter, createTaskQueryRouters, createTaskRouter } from '../modules/tasks/task.routes.js';
+import { createCalendarRouter } from '../modules/calendars/calendar.routes.js';
+import { createRequestRouter, createTaskRequestRouter } from '../modules/requests/request.routes.js';
+import { createSubtaskRouter } from '../modules/subtasks/subtask.routes.js';
 
 export const createApiRouter = (dependencies) => {
   const apiRouter = Router();
@@ -23,10 +26,14 @@ apiRouter.use('/health', healthRouter);
   apiRouter.use('/users', createUserRouter(dependencies));
   apiRouter.use('/teams', createTeamRouter(dependencies));
   apiRouter.use('/tasks', createTaskRouter(dependencies));
+  apiRouter.use('/tasks', createSubtaskRouter(dependencies));
   apiRouter.use('/assignments', createAssignmentRouter(dependencies));
   const taskQueries = createTaskQueryRouters(dependencies);
   apiRouter.use('/kanban', taskQueries.kanban);
   apiRouter.use('/my-tasks', taskQueries.mine);
   apiRouter.use('/task-history', taskQueries.history);
+  apiRouter.use('/calendars', createCalendarRouter(dependencies));
+  apiRouter.use('/tasks', createTaskRequestRouter(dependencies));
+  apiRouter.use('/requests', createRequestRouter(dependencies));
   return apiRouter;
 };

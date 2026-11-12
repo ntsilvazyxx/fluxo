@@ -10,6 +10,8 @@ export const transitionTo = (status, action) => {
     reject: { AWAITING_ACCEPTANCE: 'PENDING' },
     complete: { IN_PROGRESS: 'COMPLETED' },
     cancel: { PENDING: 'CANCELLED', AWAITING_ACCEPTANCE: 'CANCELLED', IN_PROGRESS: 'CANCELLED' },
+    reopen: { COMPLETED: 'PENDING' },
+    restore: { CANCELLED: 'PENDING' },
   };
   const next = transitions[action]?.[status];
   if (!next) throw new AppError(409, 'INVALID_TASK_TRANSITION', `A ação ${action} não é permitida no estado ${status}.`);

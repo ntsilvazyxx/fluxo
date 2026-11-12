@@ -1,0 +1,11 @@
+import { z } from 'zod';
+const uuid=z.string().uuid(),reason=z.string().trim().min(5).max(2000),minute=z.number().int().min(0).max(1440);
+const schedule=z.object({weekday:z.number().int().min(1).max(7),startMinute:minute,endMinute:minute}).refine(v=>v.startMinute<v.endMinute,'O início deve ser anterior ao fim.');
+const exception=z.object({localDate:z.string().date(),type:z.enum(['HOLIDAY','WORKING_PERIOD']),startMinute:minute.nullish(),endMinute:minute.nullish(),description:z.string().trim().max(255).optional()}).superRefine((v,ctx)=>{if(v.type==='HOLIDAY'&&(v.startMinute!=null||v.endMinute!=null))ctx.addIssue({code:'custom',message:'Feriado não possui horário.'});if(v.type==='WORKING_PERIOD'&&(v.startMinute==null||v.endMinute==null||v.startMinute>=v.endMinute))ctx.addIssue({code:'custom',message:'Período excepcional exige horário válido.'})});
+const versionBody=z.object({effectiveFrom:z.coerce.date(),schedules:z.array(schedule).min(1),exceptions:z.array(exception).default([]),expectedVersion:z.number().int().nonnegative(),reason:reason.optional()});
+export const calendarListSchema=z.object({body:z.object({}),params:z.object({}),query:z.object({})});
+export const calendarIdSchema=z.object({body:z.object({}),params:z.object({id:uuid}),query:z.object({})});
+export const createCalendarSchema=z.object({body:z.object({teamId:uuid,timezone:z.string().trim().min(3).max(64),reason:reason.optional()}),params:z.object({}),query:z.object({})});
+export const createVersionSchema=z.object({body:versionBody,params:z.object({id:uuid}),query:z.object({})});
+export const updateVersionSchema=z.object({body:versionBody.omit({effectiveFrom:true}),params:z.object({id:uuid,versionId:uuid}),query:z.object({})});
+export const publishVersionSchema=z.object({body:z.object({expectedVersion:z.number().int().nonnegative(),reason:reason.optional()}),params:z.object({id:uuid,versionId:uuid}),query:z.object({})});

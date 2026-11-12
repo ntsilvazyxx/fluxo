@@ -1,0 +1,5 @@
+import{z}from'zod';const uuid=z.string().uuid(),version=z.number().int().nonnegative(),reason=z.string().trim().min(5).max(4000),empty=z.object({});
+export const listRequestSchema=z.object({body:empty,params:z.object({id:uuid}),query:empty});
+export const createRequestSchema=z.object({body:z.object({type:z.enum(['RETURN','EXTENSION']),reason,proposedDeadlineAt:z.coerce.date().optional(),expectedVersion:version}).superRefine((v,ctx)=>{if(v.type==='EXTENSION'&&!v.proposedDeadlineAt)ctx.addIssue({code:'custom',path:['proposedDeadlineAt'],message:'Informe o novo prazo proposto.'});if(v.type==='RETURN'&&v.proposedDeadlineAt)ctx.addIssue({code:'custom',path:['proposedDeadlineAt'],message:'Devolução não recebe novo prazo.'})}),params:z.object({id:uuid}),query:empty});
+export const approveRequestSchema=z.object({body:z.object({expectedVersion:version,reason:reason.optional()}),params:z.object({id:uuid}),query:empty});
+export const denyRequestSchema=z.object({body:z.object({expectedVersion:version,reason}),params:z.object({id:uuid}),query:empty});

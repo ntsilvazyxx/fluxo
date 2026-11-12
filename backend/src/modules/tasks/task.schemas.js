@@ -10,3 +10,4 @@ export const assignmentActionSchema = z.object({ body: z.object({ expectedVersio
 export const rejectAssignmentSchema = z.object({ body: z.object({ expectedVersion: version, reason }), params: z.object({ id: uuid }), query: empty });
 export const completeTaskSchema = z.object({ body: z.object({ expectedVersion: version, completionText: z.string().trim().min(10).max(10000) }), params: z.object({ id: uuid }), query: empty });
 export const cancelTaskSchema = z.object({ body: z.object({ expectedVersion: version, reason }), params: z.object({ id: uuid }), query: empty });
+export const restartTaskSchema = z.object({ body: z.object({ expectedVersion: version, reason }), params: z.object({ id: uuid }), query: empty });

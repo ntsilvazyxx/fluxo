@@ -58,4 +58,21 @@ describe('artefatos de migração', () => {
 
     assert.doesNotMatch(migration, /DROP\s+(DATABASE|SCHEMA)/i);
   });
+
+  it('protege o histórico publicado e as exceções de calendário no SQL MariaDB', async () => {
+    const migration = await readProjectFile(
+      'prisma/migrations/20261112110000_calendar_history_guards/migration.sql',
+    );
+
+    for (const token of [
+      'holidayDateKey',
+      'publishedAt',
+      'trg_calendar_versions_no_overlap_update',
+      'trg_work_schedules_no_overlap_insert',
+      'trg_calendar_exceptions_validate_update',
+      'trg_calendar_exceptions_validate_insert',
+    ]) assert.match(migration, new RegExp(token));
+
+    assert.doesNotMatch(migration, /DROP\s+(DATABASE|SCHEMA)/i);
+  });
 });

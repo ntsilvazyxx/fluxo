@@ -1,5 +1,26 @@
 # Decisões de implementação
 
+## 2026-11-12 — Fase 4: solicitações, calendários e controle de tempo
+
+- O usuário definiu que feriado prevalece sobre qualquer período excepcional: a data local inteira contabiliza zero tempo. Um período `WORKING_PERIOD`, quando não há feriado, substitui o expediente semanal daquela data.
+- O usuário confirmou que versões futuras permanecem como rascunho; a publicação é manual e somente ocorre quando `effectiveFrom` tiver sido alcançado.
+- Datas são persistidas em UTC. O cálculo converte os intervalos para o timezone IANA do calendário histórico da atribuição com Luxon.
+- Espera é tempo corrido até aceite/encerramento. Responsabilidade é tempo corrido desde o aceite; tempo efetivo intersecta a responsabilidade com o expediente e desconta pausas.
+- Devolução cria pausa transacional; aprovação encerra atribuição, limpa responsável/prazo e retorna a `PENDING`; negativa fecha a pausa. Prorrogação não pausa e, quando aprovada, cria `DeadlineChange`.
+- Solicitações e decisões usam locks, `expectedVersion`, idempotência, auditoria e outbox transacionais. Uma solicitação pendente bloqueia outra incompatível no ciclo.
+- A migração `20261112110000_calendar_history_guards` protege versões publicadas, horários e exceções, e adiciona unicidade de feriado por data local.
+- ADMIN MASTER consulta calendários; configuração permanece restrita a Secretário e Gestor autorizado no escopo da equipe.
+
+## 2026-11-12 — Fase 5: subtarefas e ciclos de execução
+
+- A criação de subtarefa exige responsável e prazo e cria, atomicamente, a identidade, o ciclo 1 em `AWAITING_ACCEPTANCE`, a atribuição e o histórico inicial. Isso concretiza o requisito atual de que cada subtarefa tenha execução própria desde a criação.
+- Reabertura/restauração copiam título, descrição e prioridade do ciclo terminal anterior. Responsável, prazo, atribuições, solicitações e subtarefas não são copiados.
+- Uma subtarefa pode ser reaberta/restaurada manualmente apenas enquanto o ciclo principal ao qual está vinculada permanecer aberto. Subtarefas antigas nunca são reativadas pela reabertura da principal.
+- Secretário opera globalmente, Gestor no escopo da equipe e ADMIN MASTER somente com justificativa. Técnico não reabre, restaura ou cria subtarefas.
+- A criação de subtarefa incrementa a versão do ciclo principal, serializando-a com conclusão e cancelamento. Reabertura/restauração usam a versão do ciclo terminal e a unicidade já existente de ciclo ativo.
+- Operações sobre subtarefas resolvem primeiro a tarefa principal e seguem a ordem de locks principal → subtarefas por ID → ciclos → atribuições → solicitações, inclusive ao reutilizar devolução e prorrogação.
+- O schema da Fase 1 já possui FK de `parentCycleId`, trigger de apenas um nível, unicidade de ciclo ativo e triggers de imutabilidade dos ciclos encerrados. Nenhuma nova migração foi necessária.
+
 Este registro contém somente decisões técnicas reversíveis. Regras de negócio permanecem definidas pelos SDDs.
 
 ## 2026-11-11 — Fase 0: base

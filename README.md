@@ -2,7 +2,7 @@
 
 Base técnica do sistema institucional para gestão de tarefas administrativas da Secretaria de Estado de Agricultura Familiar de Mato Grosso.
 
-> Estado atual: **Fase 3 — Gestão de Tarefas e Kanban**. Solicitações, calendários avançados, imagens, e-mails reais e dashboard analítico permanecem nas fases futuras.
+> Estado atual: **Fase 5 — Subtarefas, Ciclos, Reabertura e Restauração**. Imagens, e-mails reais e dashboard analítico permanecem nas fases futuras.
 
 ## Stack
 
@@ -174,4 +174,22 @@ O módulo operacional oferece criação e edição controladas, atribuição e r
 Mutações críticas exigem `Idempotency-Key`. Edições e transições recebem `expectedVersion`; conflitos retornam HTTP 409 sem sobrescrever alterações concorrentes.
 
 Principais rotas: `/api/v1/tasks`, `/api/v1/tasks/:id`, `/api/v1/tasks/:id/assignments`, `/api/v1/assignments/:id/accept`, `/api/v1/assignments/:id/reject`, `/api/v1/tasks/:id/complete`, `/api/v1/tasks/:id/cancel`, `/api/v1/kanban`, `/api/v1/my-tasks` e `/api/v1/task-history`.
+
+## Fase 4 — Solicitações, calendários e controle de tempo
+
+O responsável atual pode solicitar devolução ou prorrogação de uma tarefa em andamento. A devolução abre uma pausa no tempo de responsabilidade até a decisão; a prorrogação mantém a contagem e, quando aprovada, registra a alteração de prazo. Decisões usam locks, `expectedVersion`, `Idempotency-Key`, auditoria e outbox na mesma transação.
+
+Cada equipe possui um calendário versionado com timezone IANA, períodos semanais e exceções. Versões futuras permanecem como rascunho e exigem publicação manual quando a vigência chegar. Versões publicadas e seus períodos são historicamente imutáveis. Um feriado prevalece sobre qualquer período excepcional e zera todo o dia local.
+
+Principais rotas: `/api/v1/tasks/:id/requests`, `/api/v1/requests/:id/approve`, `/api/v1/requests/:id/deny`, `/api/v1/calendars`, `/api/v1/calendars/:id`, `/api/v1/calendars/:id/versions` e `/api/v1/calendars/:id/versions/:versionId/publish`.
+
+Os testes automatizados com banco devem continuar usando exclusivamente `seaf_gestao_test`. A migração da Fase 4 é aplicada com `npm run db:migrate:deploy`; nunca use `prisma db push` ou `prisma migrate reset`.
+
+## Fase 5 — Subtarefas e ciclos de execução
+
+Subtarefas são tarefas completas vinculadas ao ciclo específico da principal. Elas nascem atribuídas, com prazo e estado `AWAITING_ACCEPTANCE`, e reutilizam aceite, rejeição, devolução, prorrogação, conclusão e cancelamento. Apenas um nível é permitido. A principal não pode ser concluída com subtarefas ativas e seu cancelamento encerra atomicamente as subtarefas abertas.
+
+Reabertura de tarefa concluída e restauração de tarefa cancelada criam um novo ciclo `PENDING`, sem responsável e sem prazo. O ciclo anterior permanece imutável e as subtarefas antigas não são reativadas.
+
+Principais rotas: `GET/POST /api/v1/tasks/:id/subtasks`, `POST /api/v1/tasks/:id/reopen` e `POST /api/v1/tasks/:id/restore`.
 

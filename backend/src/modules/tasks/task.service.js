@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { Prisma } from '@prisma/client';
 import { lockTaskAggregate, runCriticalTransaction } from '../../infrastructure/database/transaction.js';
 import { AppError } from '../../shared/errors/app-error.js';
 import { executeIdempotent } from '../../shared/http/idempotency.js';
 import { ACTIVE_STATUSES, requireExpectedVersion, TERMINAL_STATUSES, transitionTo } from './task.policy.js';
 import { presentTask } from './task.presenter.js';
+import { calculateAssignmentMetrics } from '../time-accounting/time-accounting.js';
 
 const missing = () => new AppError(404, 'TASK_NOT_FOUND', 'Tarefa não encontrada.');
 const conflict = (code, message) => new AppError(409, code, message);
@@ -27,23 +27,79 @@ async function requireManagement(client, request, teamId, reason) {
   requireAdminReason(request, reason);
   if (!(await canManageTeam(client, request.auth, teamId))) throw missing();
 }
+async function lockTaskPointer(client, taskId) {
+  const initial = await client.task.findFirst({
+    where: { id: taskId, deletedAt: null },
+    select: { id: true, teamId: true, parentCycleId: true, currentCycleId: true },
+  });
+  if (!initial?.currentCycleId) throw missing();
+  let parentCycle = null;
+  if (initial.parentCycleId) {
+    parentCycle = await client.taskCycle.findUnique({
+      where: { id: initial.parentCycleId },
+      select: { id: true, taskId: true, closedAt: true },
+    });
+    if (!parentCycle) throw missing();
+    await lockTaskAggregate(client, {
+      rootTaskId: parentCycle.taskId,
+      subtaskIds: [initial.id],
+      cycleIds: [parentCycle.id, initial.currentCycleId],
+    });
+  } else {
+    await lockTaskAggregate(client, { rootTaskId: initial.id, cycleIds: [initial.currentCycleId] });
+  }
+  const task = await client.task.findFirst({
+    where: { id: taskId, deletedAt: null },
+    select: { id: true, teamId: true, parentCycleId: true, currentCycleId: true },
+  });
+  if (!task?.currentCycleId) throw missing();
+  if (parentCycle) parentCycle = await client.taskCycle.findUnique({ where: { id: parentCycle.id } });
+  return { task, parentCycle, rootTaskId: parentCycle?.taskId ?? task.id, subtaskIds: parentCycle ? [task.id] : [] };
+}
 async function lockCurrent(client, taskId) {
-  const rows = await client.$queryRaw(Prisma.sql`SELECT id, teamId, currentCycleId FROM tasks WHERE id = ${taskId} AND deletedAt IS NULL FOR UPDATE`);
-  const task = rows[0]; if (!task?.currentCycleId) throw missing();
-  await lockTaskAggregate(client, { rootTaskId: task.id, cycleIds: [task.currentCycleId] });
+  const { task, parentCycle } = await lockTaskPointer(client, taskId);
+  if (parentCycle?.closedAt) throw conflict('PARENT_CYCLE_CLOSED', 'O ciclo principal da subtarefa já foi encerrado.');
   const cycle = await client.taskCycle.findUnique({ where: { id: task.currentCycleId }, include: { assignments: { where: { endedAt: null } }, requests: { where: { status: 'PENDING' } } } });
   if (!cycle || cycle.closedAt) throw conflict('TASK_CYCLE_CLOSED', 'O ciclo atual já foi encerrado.');
   const assignment = cycle.assignments[0] ?? null;
   if (assignment) await lockTaskAggregate(client, { assignmentIds: [assignment.id], requestIds: cycle.requests.map((item)=>item.id) });
   return { task, cycle, assignment };
 }
+async function lockTerminal(client, taskId) {
+  const { task, parentCycle } = await lockTaskPointer(client, taskId);
+  const cycle = await client.taskCycle.findUnique({ where: { id: task.currentCycleId } });
+  if (!cycle?.closedAt) throw conflict('TASK_CYCLE_ACTIVE', 'A tarefa ainda possui um ciclo ativo.');
+  if (parentCycle) {
+    if (parentCycle.closedAt) {
+      throw conflict('PARENT_CYCLE_CLOSED', 'Não é possível reabrir uma subtarefa de ciclo principal encerrado.');
+    }
+  }
+  return { task, cycle };
+}
 async function lockForCancellation(client, taskId) {
-  const rows = await client.$queryRaw(Prisma.sql`SELECT id, teamId, currentCycleId FROM tasks WHERE id = ${taskId} AND deletedAt IS NULL FOR UPDATE`);
-  const task = rows[0];
-  if (!task?.currentCycleId) throw missing();
+  const initial = await client.task.findFirst({
+    where: { id: taskId, deletedAt: null },
+    select: { id: true, parentCycleId: true, currentCycleId: true },
+  });
+  if (!initial?.currentCycleId) throw missing();
+  let task;
+  let rootTaskId;
+  let subtaskIds;
+  if (initial.parentCycleId) {
+    ({ task, rootTaskId, subtaskIds } = await lockTaskPointer(client, taskId));
+  } else {
+    await lockTaskAggregate(client, { rootTaskId: initial.id });
+    task = await client.task.findFirst({
+      where: { id: taskId, deletedAt: null },
+      select: { id: true, teamId: true, parentCycleId: true, currentCycleId: true },
+    });
+    if (!task?.currentCycleId) throw missing();
+    rootTaskId = task.id;
+    subtaskIds = [];
+  }
   const childPointers = await client.task.findMany({ where: { parentCycleId: task.currentCycleId, currentCycle: { status: { in: ACTIVE_STATUSES } } }, select: { id: true, currentCycleId: true }, orderBy: { id: 'asc' } });
   const cycleIds = [task.currentCycleId, ...childPointers.map((child) => child.currentCycleId)];
-  await lockTaskAggregate(client, { rootTaskId: task.id, subtaskIds: childPointers.map((child) => child.id), cycleIds });
+  await lockTaskAggregate(client, { rootTaskId, subtaskIds: [...subtaskIds, ...childPointers.map((child) => child.id)], cycleIds });
   const cycles = await client.taskCycle.findMany({ where: { id: { in: cycleIds } }, include: { assignments: { where: { endedAt: null } }, requests: { where: { status: 'PENDING' } } } });
   const assignments = cycles.flatMap((cycle) => cycle.assignments);
   const requests = cycles.flatMap((cycle) => cycle.requests);
@@ -51,13 +107,62 @@ async function lockForCancellation(client, taskId) {
   const byId = new Map(cycles.map((cycle) => [cycle.id, cycle]));
   const cycle = byId.get(task.currentCycleId);
   if (!cycle || cycle.closedAt) throw conflict('TASK_CYCLE_CLOSED', 'O ciclo atual já foi encerrado.');
-  return { root: { task, cycle, assignment: cycle.assignments[0] ?? null }, children: childPointers.map((child) => ({ ...child, currentCycle: byId.get(child.currentCycleId) })) };
+  return { root: { task, cycle, assignment: cycle.assignments[0] ?? null }, children: childPointers.map((child) => ({ ...child, currentCycle: byId.get(child.currentCycleId) })).filter((child) => child.currentCycle && !child.currentCycle.closedAt && ACTIVE_STATUSES.includes(child.currentCycle.status)) };
 }
 async function closePendingRequests(tx, cycleId, status, actorId, now) {
   const pending = await tx.taskRequest.findMany({ where: { cycleId, status: 'PENDING' }, select: { id: true, assignmentId: true } });
   if (!pending.length) return;
   await tx.taskPauseInterval.updateMany({ where: { requestId: { in: pending.map((item)=>item.id) }, endedAt: null }, data: { endedAt: now } });
   await tx.taskRequest.updateMany({ where: { id: { in: pending.map((item)=>item.id) } }, data: { status, decidedAt: now, decidedById: actorId } });
+}
+async function restartCycle(prisma, request, id, input, key, action) {
+  return executeIdempotent(prisma, {
+    actorId: request.auth.userId,
+    key,
+    payload: { id, action, ...input },
+    operation: async (tx) => {
+      const { task, cycle } = await lockTerminal(tx, id);
+      await requireManagement(tx, request, task.teamId, input.reason);
+      requireExpectedVersion(cycle, input.expectedVersion);
+      transitionTo(cycle.status, action);
+      const now = new Date();
+      const newCycle = await tx.taskCycle.create({
+        data: {
+          id: randomUUID(),
+          taskId: task.id,
+          cycleNumber: cycle.cycleNumber + 1,
+          title: cycle.title,
+          description: cycle.description,
+          priority: cycle.priority,
+          status: 'PENDING',
+          deadlineAt: null,
+          openedAt: now,
+        },
+      });
+      await tx.task.update({
+        where: { id: task.id },
+        data: { currentCycleId: newCycle.id, version: { increment: 1 } },
+      });
+      const eventType = action === 'reopen' ? 'TASK_REOPENED' : 'TASK_RESTORED';
+      await audit(tx, request, {
+        entityType: 'Task',
+        entityId: task.id,
+        action: eventType,
+        beforeJson: { previousCycleId: cycle.id, previousCycleNumber: cycle.cycleNumber, previousStatus: cycle.status },
+        afterJson: { cycleId: newCycle.id, cycleNumber: newCycle.cycleNumber, status: 'PENDING', deadlineAt: null },
+        reason: input.reason,
+      });
+      await tx.outboxEvent.create({
+        data: {
+          id: randomUUID(),
+          eventType,
+          payloadJson: { taskId: task.id, previousCycleId: cycle.id, cycleId: newCycle.id },
+          dedupeKey: `task:${task.id}:${eventType}:${newCycle.id}`,
+        },
+      });
+      return presentTask(await tx.task.findUnique({ where: { id: task.id }, include: includeCurrent }));
+    },
+  });
 }
 
 export const createTaskService = ({ prisma }) => ({
@@ -88,11 +193,25 @@ export const createTaskService = ({ prisma }) => ({
   },
 
   async detail(actor, id) {
-    const task = await prisma.task.findFirst({ where: { id, deletedAt: null, ...scopeWhere(actor) }, include: { team: true, currentCycle: { include: { assignments: { include: { user: true }, orderBy: { assignedAt: 'desc' } } } }, cycles: { include: { assignments: { include: { user: true }, orderBy: { assignedAt: 'asc' } }, deadlineChanges: { orderBy: { createdAt: 'asc' } }, notes: { orderBy: { createdAt: 'asc' } } }, orderBy: { cycleNumber: 'asc' } } } });
+    const assignmentInclude = { user: true, pauseIntervals: { orderBy: { startedAt: 'asc' } }, calendarVersion: { include: { calendar: true, schedules: true, exceptions: true } } };
+    const task = await prisma.task.findFirst({ where: { id, deletedAt: null, ...scopeWhere(actor) }, include: { team: true, currentCycle: { include: { assignments: { include: assignmentInclude, orderBy: { assignedAt: 'desc' } } } }, cycles: { include: { assignments: { include: assignmentInclude, orderBy: { assignedAt: 'asc' } }, requests: { include: { pauseIntervals: true }, orderBy: { createdAt: 'asc' } }, deadlineChanges: { orderBy: { createdAt: 'asc' } }, notes: { orderBy: { createdAt: 'asc' } } }, orderBy: { cycleNumber: 'asc' } } } });
     if (!task) throw missing();
+    const [parentCycle, subtasks] = await Promise.all([
+      task.parentCycleId
+        ? prisma.taskCycle.findUnique({
+            where: { id: task.parentCycleId },
+            include: { task: { select: { id: true, publicNumber: true } } },
+          })
+        : null,
+      prisma.task.findMany({
+        where: { parentCycleId: { in: task.cycles.map((cycle) => cycle.id) }, deletedAt: null },
+        include: includeCurrent,
+        orderBy: { createdAt: 'asc' },
+      }),
+    ]);
     const ids = [task.id, ...task.cycles.map((cycle)=>cycle.id), ...task.cycles.flatMap((cycle)=>cycle.assignments.map((item)=>item.id))];
     const events = await prisma.auditEvent.findMany({ where: { entityId: { in: ids } }, orderBy: { createdAt: 'asc' } });
-    return { ...presentTask(task), cycles: task.cycles.map((cycle)=>({ id: cycle.id, cycleNumber: cycle.cycleNumber, title: cycle.title, description: cycle.description, priority: cycle.priority, status: cycle.status, deadlineAt: cycle.deadlineAt, version: cycle.version, openedAt: cycle.openedAt, closedAt: cycle.closedAt, completionText: cycle.completionText, assignments: cycle.assignments.map((a)=>({ id:a.id,userId:a.userId,user:{id:a.user.id,name:a.user.name},assignedAt:a.assignedAt,acceptedAt:a.acceptedAt,endedAt:a.endedAt,endReason:a.endReason })), deadlineChanges: cycle.deadlineChanges, notes: cycle.notes })), history: events };
+    return { ...presentTask(task), parentTask: parentCycle ? { id: parentCycle.task.id, publicNumber: String(parentCycle.task.publicNumber), cycleId: parentCycle.id, title: parentCycle.title } : null, subtasks: subtasks.map(presentTask), cycles: task.cycles.map((cycle)=>({ id: cycle.id, cycleNumber: cycle.cycleNumber, title: cycle.title, description: cycle.description, priority: cycle.priority, status: cycle.status, deadlineAt: cycle.deadlineAt, version: cycle.version, openedAt: cycle.openedAt, closedAt: cycle.closedAt, completionText: cycle.completionText, assignments: cycle.assignments.map((a)=>({ id:a.id,userId:a.userId,user:{id:a.user.id,name:a.user.name},assignedAt:a.assignedAt,acceptedAt:a.acceptedAt,endedAt:a.endedAt,endReason:a.endReason,calendarVersionId:a.calendarVersionId,pauses:a.pauseIntervals,metrics:calculateAssignmentMetrics(a) })), requests:cycle.requests.map(r=>({id:r.id,type:r.type,status:r.status,reason:r.reason,proposedDeadlineAt:r.proposedDeadlineAt,decidedById:r.decidedById,decidedAt:r.decidedAt,decisionReason:r.decisionReason,createdAt:r.createdAt,pauses:r.pauseIntervals})), deadlineChanges: cycle.deadlineChanges, notes: cycle.notes })), history: events };
   },
 
   async create(request, input, key) {
@@ -165,5 +284,9 @@ export const createTaskService = ({ prisma }) => ({
 
   async complete(request,id,input,key){return executeIdempotent(prisma,{actorId:request.auth.userId,key,payload:{id,...input},operation:async(tx)=>{const{cycle,assignment}=await lockCurrent(tx,id);requireExpectedVersion(cycle,input.expectedVersion);transitionTo(cycle.status,'complete');if(!assignment||assignment.userId!==request.auth.userId)throw conflict('ASSIGNMENT_NOT_CURRENT','Somente o responsável atual pode concluir a tarefa.');if(cycle.requests.length)throw conflict('PENDING_REQUEST_EXISTS','Há solicitação pendente para esta atribuição.');const openSubtasks=await tx.task.count({where:{parentCycleId:cycle.id,currentCycle:{status:{in:ACTIVE_STATUSES}}}});if(openSubtasks)throw new AppError(422,'OPEN_SUBTASKS','Conclua ou cancele as subtarefas abertas.');const now=new Date();await tx.taskAssignment.update({where:{id:assignment.id},data:{endedAt:now,endReason:'COMPLETED'}});await tx.taskCycle.update({where:{id:cycle.id},data:{status:'COMPLETED',completionText:input.completionText,closedAt:now,version:{increment:1}}});await audit(tx,request,{entityType:'TaskCycle',entityId:cycle.id,action:'TASK_COMPLETED',afterJson:{completionText:input.completionText,closedAt:now}});await outbox(tx,id,cycle,'TASK_COMPLETED',{userId:request.auth.userId});return presentTask(await tx.task.findUnique({where:{id},include:includeCurrent}));}})},
 
-  async cancel(request,id,input,key){return executeIdempotent(prisma,{actorId:request.auth.userId,key,payload:{id,...input},operation:async(tx)=>{const{root,children}=await lockForCancellation(tx,id);await requireManagement(tx,request,root.task.teamId,input.reason);requireExpectedVersion(root.cycle,input.expectedVersion);transitionTo(root.cycle.status,'cancel');const now=new Date();for(const child of children){await closePendingRequests(tx,child.currentCycle.id,'CLOSED_BY_CANCELLATION',request.auth.userId,now);await tx.taskAssignment.updateMany({where:{cycleId:child.currentCycle.id,endedAt:null},data:{endedAt:now,endReason:'CANCELLED'}});await tx.taskCycle.update({where:{id:child.currentCycle.id},data:{status:'CANCELLED',closedAt:now,version:{increment:1}}});await audit(tx,request,{entityType:'TaskCycle',entityId:child.currentCycle.id,action:'SUBTASK_CANCELLED_WITH_PARENT',reason:input.reason});}await closePendingRequests(tx,root.cycle.id,'CLOSED_BY_CANCELLATION',request.auth.userId,now);if(root.assignment)await tx.taskAssignment.update({where:{id:root.assignment.id},data:{endedAt:now,endReason:'CANCELLED'}});await tx.taskCycle.update({where:{id:root.cycle.id},data:{status:'CANCELLED',closedAt:now,version:{increment:1}}});await audit(tx,request,{entityType:'TaskCycle',entityId:root.cycle.id,action:'TASK_CANCELLED',afterJson:{closedAt:now,cancelledSubtasks:children.length},reason:input.reason});await outbox(tx,id,root.cycle,'TASK_CANCELLED');return presentTask(await tx.task.findUnique({where:{id},include:includeCurrent}));}})},
+  async cancel(request,id,input,key){return executeIdempotent(prisma,{actorId:request.auth.userId,key,payload:{id,...input},operation:async(tx)=>{const{root,children}=await lockForCancellation(tx,id);await requireManagement(tx,request,root.task.teamId,input.reason);requireExpectedVersion(root.cycle,input.expectedVersion);transitionTo(root.cycle.status,'cancel');const now=new Date();for(const child of children){await closePendingRequests(tx,child.currentCycle.id,'CLOSED_BY_CANCELLATION',request.auth.userId,now);await tx.taskAssignment.updateMany({where:{cycleId:child.currentCycle.id,endedAt:null},data:{endedAt:now,endReason:'CANCELLED'}});await tx.taskCycle.update({where:{id:child.currentCycle.id},data:{status:'CANCELLED',closedAt:now,version:{increment:1}}});await audit(tx,request,{entityType:'TaskCycle',entityId:child.currentCycle.id,action:'SUBTASK_CANCELLED_WITH_PARENT',reason:input.reason});await tx.outboxEvent.create({data:{id:randomUUID(),eventType:'SUBTASK_CANCELLED_WITH_PARENT',payloadJson:{taskId:child.id,cycleId:child.currentCycle.id,parentTaskId:id},dedupeKey:`task:${child.id}:SUBTASK_CANCELLED_WITH_PARENT:${child.currentCycle.version+1}`}});}await closePendingRequests(tx,root.cycle.id,'CLOSED_BY_CANCELLATION',request.auth.userId,now);if(root.assignment)await tx.taskAssignment.update({where:{id:root.assignment.id},data:{endedAt:now,endReason:'CANCELLED'}});await tx.taskCycle.update({where:{id:root.cycle.id},data:{status:'CANCELLED',closedAt:now,version:{increment:1}}});await audit(tx,request,{entityType:'TaskCycle',entityId:root.cycle.id,action:'TASK_CANCELLED',afterJson:{closedAt:now,cancelledSubtasks:children.length},reason:input.reason});await outbox(tx,id,root.cycle,'TASK_CANCELLED');return presentTask(await tx.task.findUnique({where:{id},include:includeCurrent}));}})},
+
+  async reopen(request,id,input,key){return restartCycle(prisma,request,id,input,key,'reopen')},
+
+  async restore(request,id,input,key){return restartCycle(prisma,request,id,input,key,'restore')},
 });
