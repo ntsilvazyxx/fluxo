@@ -10,6 +10,7 @@ import { createRequestRouter, createTaskRequestRouter } from '../modules/request
 import { createSubtaskRouter } from '../modules/subtasks/subtask.routes.js';
 import { createImageRouter, createTaskImageRouter } from '../modules/images/image.routes.js';
 import { createNotificationRouter } from '../modules/notifications/notification.routes.js';
+import { createDashboardRouter, createReportRouter } from '../modules/dashboard/dashboard.routes.js';
 
 export const createApiRouter = (dependencies) => {
   const apiRouter = Router();
@@ -40,5 +41,7 @@ apiRouter.use('/health', healthRouter);
   apiRouter.use('/tasks', createTaskImageRouter(dependencies));
   apiRouter.use('/images', createImageRouter(dependencies));
   apiRouter.use('/notifications', createNotificationRouter(dependencies));
+  apiRouter.use('/dashboard', createDashboardRouter(dependencies));
+  apiRouter.use('/reports', createReportRouter(dependencies));
   return apiRouter;
 };

@@ -1,8 +1,8 @@
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthContext.jsx';
 import { AppShell } from './layout/AppShell.jsx';
 import { CalendarPage } from './pages/CalendarPage.jsx';
-import { HomePage } from './pages/HomePage.jsx';
 import { KanbanPage } from './pages/KanbanPage.jsx';
 import { LoginPage } from './pages/LoginPage.jsx';
 import { MyTasksPage } from './pages/MyTasksPage.jsx';
@@ -12,6 +12,9 @@ import { NotificationsPage } from './pages/NotificationsPage.jsx';
 import { TaskHistoryPage } from './pages/TaskHistoryPage.jsx';
 import { TeamsPage } from './pages/TeamsPage.jsx';
 import { UsersPage } from './pages/UsersPage.jsx';
+
+const DashboardPage = lazy(() => import('./pages/DashboardPage.jsx').then((module) => ({ default: module.DashboardPage })));
+const ReportsPage = lazy(() => import('./pages/ReportsPage.jsx').then((module) => ({ default: module.ReportsPage })));
 
 function Protected({ children }) {
   const { status } = useAuth();
@@ -25,13 +28,17 @@ function Roles({ allowed, children }) {
 }
 
 const managers = ['ADMIN_MASTER', 'SECRETARY', 'MANAGER'];
+const analysts = ['SECRETARY', 'MANAGER'];
+const LoadingPage = ({ children }) => <Suspense fallback={<p className="text-muted">Carregando\u2026</p>}>{children}</Suspense>;
 
 function AppRoutes() {
   const { status } = useAuth();
   return <Routes>
     <Route path="/login" element={status === 'authenticated' ? <Navigate to="/" replace /> : <LoginPage />} />
     <Route path="/" element={<Protected><AppShell /></Protected>}>
-      <Route index element={<HomePage />} />
+      <Route index element={<Roles allowed={analysts}><LoadingPage><DashboardPage /></LoadingPage></Roles>} />
+      <Route path="dashboard" element={<Roles allowed={analysts}><LoadingPage><DashboardPage /></LoadingPage></Roles>} />
+      <Route path="relatorios" element={<Roles allowed={analysts}><LoadingPage><ReportsPage /></LoadingPage></Roles>} />
       <Route path="kanban" element={<Roles allowed={managers}><KanbanPage /></Roles>} />
       <Route path="minhas-tarefas" element={<MyTasksPage />} />
       <Route path="historico" element={<TaskHistoryPage />} />

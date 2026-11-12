@@ -193,3 +193,11 @@ Reabertura de tarefa concluída e restauração de tarefa cancelada criam um nov
 
 Principais rotas: `GET/POST /api/v1/tasks/:id/subtasks`, `POST /api/v1/tasks/:id/reopen` e `POST /api/v1/tasks/:id/restore`.
 
+## Fase 8 — Dashboard e relatórios gerenciais
+
+O dashboard e o relatório são disponibilizados exclusivamente a Secretários e Gestores, sempre no escopo organizacional autorizado. Técnicos e ADMIN MASTER recebem `403` mesmo em acesso direto à API nesta fase.
+
+`GET /api/v1/dashboard` fornece situação atual por tarefa principal e séries históricas por ciclo. No período informado, ciclos criados são filtrados por `openedAt`; ciclos concluídos ou cancelados, por `closedAt`. Por isso, os totais atuais não devem ser comparados diretamente a totais históricos. Os filtros de equipe, responsável, status, prioridade e situação de prazo são aplicados no backend antes da agregação.
+
+`GET /api/v1/reports` oferece lista paginada e ordenável de tarefas e subtarefas dentro do escopo do ator. A interface fica em `/dashboard` e `/relatorios`; suas páginas são carregadas sob demanda.
+

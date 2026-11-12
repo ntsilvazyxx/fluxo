@@ -23,6 +23,13 @@
 
 Este registro contém somente decisões técnicas reversíveis. Regras de negócio permanecem definidas pelos SDDs.
 
+## 2026-11-12 — Fase 8: dashboard e relatórios gerenciais
+
+- Dashboard e relatórios são autorizados somente para `SECRETARY` e `MANAGER`. O backend bloqueia diretamente `TECHNICIAN` e `ADMIN_MASTER`; o último permanece desabilitado por padrão até existir autorização administrativa formal prevista nos SDDs.
+- A situação atual agrega somente tarefas principais (`parentCycleId = null`) por sua identidade permanente e ciclo atual. Subtarefas não são somadas aos indicadores da tarefa principal; permanecem visíveis como registros independentes no relatório detalhado.
+- Indicadores históricos usam ciclos: criação por `openedAt` e conclusão/cancelamento por `closedAt`, ambos dentro do período filtrado. A taxa de conclusão é `ciclos concluídos / (ciclos concluídos + cancelados)`, sem misturar esses números com as contagens atuais.
+- Atraso e prazo próximo são derivados no instante da consulta; tempo médio reaproveita o cálculo de expediente, pausas e versão histórica de calendário da Fase 4.
+
 ## 2026-11-11 — Fase 0: base
 
 - Organização em workspaces npm com `frontend/` e `backend/`, preservando a documentação em `docs/sdds/`.

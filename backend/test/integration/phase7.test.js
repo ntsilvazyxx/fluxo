@@ -631,7 +631,10 @@ suite('Fase 7 - notificações, outbox e e-mails no MariaDB real', () => {
     });
 
     const result = await outboxService.recoverOrphaned(prisma);
-    assert.equal(result.count, 1, 'apenas o evento antigo deve ser recuperado');
+    // A recuperação é global em produção. O banco compartilhado pode conter
+    // órfãos de execuções anteriores; a garantia desta execução é o estado dos
+    // eventos identificados pelo seu runPrefix, e não a contagem global.
+    assert.ok(result.count >= 1, 'o evento órfão desta execução deve ser recuperado');
 
     const recovered = await prisma.outboxEvent.findUnique({ where: { id: orphan1.id } });
     assert.equal(recovered.status, 'PENDING');

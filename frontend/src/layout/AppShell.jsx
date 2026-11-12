@@ -1,4 +1,4 @@
-import { Archive, Bell, CalendarDays, Columns3, Home, LogOut, Menu, ShieldCheck, UsersRound } from 'lucide-react';
+import { Archive, BarChart3, Bell, CalendarDays, Columns3, FileText, Home, LogOut, Menu, ShieldCheck, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink, Link, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
@@ -8,8 +8,10 @@ export function AppShell() {
   const [open, setOpen] = useState(false);
   const managerial = ['ADMIN_MASTER', 'SECRETARY', 'MANAGER'].includes(user.role.code);
   const administer = ['ADMIN_MASTER', 'SECRETARY'].includes(user.role.code);
+  const analytics = ['SECRETARY', 'MANAGER'].includes(user.role.code);
   const links = [
     { to: '/', label: 'Início', icon: Home },
+    ...(analytics ? [{ to: '/dashboard', label: 'Dashboard', icon: BarChart3 }, { to: '/relatorios', label: 'Relatórios', icon: FileText }] : []),
     ...(managerial ? [
       { to: '/kanban', label: 'Kanban', icon: Columns3 },
       { to: '/calendarios', label: 'Calendários', icon: CalendarDays },
