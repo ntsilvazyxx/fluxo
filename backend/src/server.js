@@ -3,7 +3,7 @@ import { env } from './config/env.js';
 import { createPrismaClient } from './infrastructure/database/prisma.js';
 
 const prisma = createPrismaClient();
-const app = createApp({ prisma });
+const app = createApp({ prisma, startOutboxWorker: true });
 
 const server = app.listen(env.port, () => {
   console.info(`SEAF API disponível em http://localhost:${env.port}/api/v1`);
@@ -11,6 +11,7 @@ const server = app.listen(env.port, () => {
 
 const shutdown = (signal) => {
   console.info(`${signal} recebido. Encerrando a API...`);
+  app.locals.outboxWorker?.stop();
   server.close(async () => { await prisma.$disconnect(); process.exit(0); });
 };
 

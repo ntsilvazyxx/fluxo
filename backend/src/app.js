@@ -9,14 +9,18 @@ import { correlationId } from './middlewares/correlation-id.js';
 import { errorHandler } from './middlewares/error-handler.js';
 import { notFound } from './middlewares/not-found.js';
 import { createApiRouter } from './routes/index.js';
+import { createOutboxWorker } from './modules/outbox/outbox.worker.js';
+import { createEmailSender } from './modules/outbox/outbox.sender.js';
 
 export const createApp = ({
   prisma = createPrismaClient(),
   config = env,
   passwordResetNotifier = async () => {},
   imageStorage,
+  startOutboxWorker = false,
 } = {}) => {
   const app = express();
+  const emailSender = createEmailSender({ config });
 
   app.disable('x-powered-by');
   app.use(helmet());
@@ -40,6 +44,12 @@ export const createApp = ({
   app.use('/api/v1', createApiRouter({ prisma, config, passwordResetNotifier, imageStorage }));
   app.use(notFound);
   app.use(errorHandler);
+
+  if (startOutboxWorker) {
+    const outboxWorker = createOutboxWorker({ prisma, emailSender });
+    app.locals.outboxWorker = outboxWorker;
+    void outboxWorker.start();
+  }
 
   return app;
 };

@@ -73,4 +73,12 @@ export const env = Object.freeze({
   imageStoragePath:
     process.env.IMAGE_STORAGE_PATH ??
     fileURLToPath(new URL('../../storage/images', import.meta.url)),
+  mailEnabled: process.env.MAIL_ENABLED === '1',
+  mailHost: process.env.MAIL_HOST ?? 'localhost',
+  mailPort: parsePositiveInteger('MAIL_PORT', process.env.MAIL_PORT, 25),
+  mailUser: process.env.MAIL_USER ?? '',
+  mailPass: process.env.MAIL_PASS ?? '',
+  mailFrom: process.env.MAIL_FROM ?? 'seaf@instituto.local',
+  mailFromName: process.env.MAIL_FROM_NAME ?? 'SEAF Gestão de Tarefas',
+  appBaseUrl: process.env.APP_BASE_URL ?? 'http://localhost:5173',
 });

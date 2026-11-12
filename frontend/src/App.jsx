@@ -8,6 +8,7 @@ import { LoginPage } from './pages/LoginPage.jsx';
 import { MyTasksPage } from './pages/MyTasksPage.jsx';
 import { TaskDetailPage } from './pages/TaskDetailPage.jsx';
 import { TaskFormPage } from './pages/TaskFormPage.jsx';
+import { NotificationsPage } from './pages/NotificationsPage.jsx';
 import { TaskHistoryPage } from './pages/TaskHistoryPage.jsx';
 import { TeamsPage } from './pages/TeamsPage.jsx';
 import { UsersPage } from './pages/UsersPage.jsx';
@@ -39,6 +40,7 @@ function AppRoutes() {
       <Route path="usuarios" element={<Roles allowed={['ADMIN_MASTER', 'SECRETARY']}><UsersPage /></Roles>} />
       <Route path="equipes" element={<TeamsPage />} />
       <Route path="calendarios" element={<Roles allowed={managers}><CalendarPage /></Roles>} />
+      <Route path="notificacoes" element={<NotificationsPage />} />
     </Route>
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes>;

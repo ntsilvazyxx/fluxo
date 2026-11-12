@@ -1,6 +1,6 @@
-import { Archive, CalendarDays, Columns3, Home, LogOut, Menu, ShieldCheck, UsersRound } from 'lucide-react';
+import { Archive, Bell, CalendarDays, Columns3, Home, LogOut, Menu, ShieldCheck, UsersRound } from 'lucide-react';
 import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Link, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
 
 export function AppShell() {
@@ -16,6 +16,7 @@ export function AppShell() {
     ] : []),
     { to: '/minhas-tarefas', label: 'Minhas tarefas', icon: ShieldCheck },
     { to: '/historico', label: 'Histórico', icon: Archive },
+    { to: '/notificacoes', label: 'Notificações', icon: Bell },
     ...(administer ? [{ to: '/usuarios', label: 'Usuários', icon: UsersRound }] : []),
     { to: '/equipes', label: 'Equipes', icon: UsersRound },
   ];
@@ -28,6 +29,7 @@ export function AppShell() {
         <div className="min-w-0 flex-1"><p className="font-bold">SEAF</p><p className="truncate text-xs text-white/70">Gestão de Tarefas</p></div>
         <div className="hidden text-right sm:block"><p className="text-sm font-semibold">{user.name}</p><p className="text-xs text-white/70">{user.role.label}</p></div>
         <button onClick={logout} className="grid min-h-11 min-w-11 place-items-center" aria-label="Sair"><LogOut size={20} /></button>
+        <Link to="/notificacoes" className="grid min-h-11 min-w-11 place-items-center text-white/90 hover:text-white" aria-label="Notificações"><Bell size={20} /></Link>
       </div>
     </header>
     <div className="mx-auto flex max-w-7xl">
