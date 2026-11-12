@@ -18,18 +18,18 @@ const average = (values) => values.length ? Math.round(values.reduce((total, val
 
 function currentCycleFilter(filters, now) {
   const currentCycle = {};
-  if (filters.status) currentCycle.status = filters.status;
   if (filters.priority) currentCycle.priority = filters.priority;
   if (filters.responsibleId) currentCycle.assignments = { some: { userId: filters.responsibleId, endedAt: null } };
   if (filters.deadlineSituation === 'OVERDUE') Object.assign(currentCycle, { status: { in: ACTIVE }, deadlineAt: { lt: now } });
   if (filters.deadlineSituation === 'DUE_SOON') Object.assign(currentCycle, { status: { in: ACTIVE }, deadlineAt: { gte: now, lte: new Date(now.getTime() + 24 * HOUR) } });
   if (filters.deadlineSituation === 'ON_TIME') Object.assign(currentCycle, { status: { in: ACTIVE }, deadlineAt: { gt: new Date(now.getTime() + 24 * HOUR) } });
   if (filters.deadlineSituation === 'NO_DEADLINE') currentCycle.deadlineAt = null;
+  if (filters.status) currentCycle.AND = [{ status: filters.status }];
   return currentCycle;
 }
 
 function taskWhere(actor, filters, now, { search } = {}) {
-  const where = { deletedAt: null, ...scopedTasks(actor) };
+  const where = { deletedAt: null, currentCycleId: { not: null }, ...scopedTasks(actor) };
   if (filters.teamId) where.teamId = filters.teamId;
   const cycle = currentCycleFilter(filters, now);
   if (Object.keys(cycle).length) where.currentCycle = cycle;
@@ -57,7 +57,10 @@ export const createDashboardService = ({ prisma }) => ({
     const where = { ...taskWhere(actor, filters, now), parentCycleId: null };
     const tasks = await prisma.task.findMany({ where, include: taskInclude });
     const current = tasks.map((task) => ({ task, cycle: task.currentCycle })).filter(({ cycle }) => cycle);
-    const scopedCycleWhere = { task: { deletedAt: null, parentCycleId: null, ...scopedTasks(actor), ...(filters.teamId ? { teamId: filters.teamId } : {}) } };
+    const historicalFilter = currentCycleFilter(filters, now);
+    // Historical responsibility includes ended assignments of that cycle.
+    if (filters.responsibleId) historicalFilter.assignments = { some: { userId: filters.responsibleId } };
+    const scopedCycleWhere = { ...historicalFilter, task: { deletedAt: null, parentCycleId: null, ...scopedTasks(actor), ...(filters.teamId ? { teamId: filters.teamId } : {}) } };
     const historicCycles = await prisma.taskCycle.findMany({
       where: scopedCycleWhere,
       select: { id: true, taskId: true, status: true, deadlineAt: true, openedAt: true, closedAt: true },

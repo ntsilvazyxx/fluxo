@@ -39,4 +39,50 @@ describe('dashboard service', () => {
     assert.equal(report.meta.total, 1);
     assert.equal(report.rows[0].isSubtask, true);
   });
+
+  it('combina status e prazo sem sobrescrever o estado solicitado', async () => {
+    let where;
+    const service = createDashboardService({ prisma: { task: {
+      count: async () => 0,
+      findMany: async (query) => { where = query.where; return []; },
+    } } });
+    await service.report({ roleCode: 'MANAGER', userId: 'manager' }, {
+      status: 'COMPLETED', deadlineSituation: 'OVERDUE', page: 1, pageSize: 20,
+      sortBy: 'openedAt', sortDirection: 'desc',
+    });
+    assert.deepEqual(where.currentCycle.status, { in: ['PENDING', 'AWAITING_ACCEPTANCE', 'IN_PROGRESS'] });
+    assert.deepEqual(where.currentCycle.AND, [{ status: 'COMPLETED' }]);
+    assert.equal(where.team.managers.some.userId, 'manager');
+  });
+
+  it('exclui registros sem ciclo atual antes da contagem e paginação do relatório', async () => {
+    const queries = [];
+    const service = createDashboardService({ prisma: { task: {
+      count: async ({ where }) => { queries.push(where); return 0; },
+      findMany: async ({ where }) => { queries.push(where); return []; },
+    } } });
+    await service.report({ roleCode: 'SECRETARY', userId: 'secretary' }, {
+      page: 1, pageSize: 20, sortBy: 'openedAt', sortDirection: 'desc',
+    });
+    assert.equal(queries.length, 2);
+    for (const where of queries) assert.deepEqual(where.currentCycleId, { not: null });
+  });
+
+  it('aplica filtros ao próprio ciclo histórico e preserva atribuições encerradas', async () => {
+    let currentWhere; let historicalWhere;
+    const service = createDashboardService({ prisma: {
+      task: { findMany: async ({ where }) => { currentWhere = where; return []; } },
+      taskCycle: { findMany: async ({ where }) => { historicalWhere = where; return []; } },
+    } });
+    await service.summary({ roleCode: 'MANAGER', userId: 'manager' }, {
+      priority: 'HIGH', responsibleId: 'responsible', status: 'COMPLETED', teamId: 'team',
+    });
+    assert.equal(historicalWhere.priority, 'HIGH');
+    assert.deepEqual(historicalWhere.AND, [{ status: 'COMPLETED' }]);
+    assert.deepEqual(historicalWhere.assignments, { some: { userId: 'responsible' } });
+    assert.equal(currentWhere.currentCycle.assignments.some.endedAt, null);
+    assert.equal(historicalWhere.task.parentCycleId, null);
+    assert.equal(historicalWhere.task.teamId, 'team');
+    assert.equal(historicalWhere.task.team.managers.some.userId, 'manager');
+  });
 });

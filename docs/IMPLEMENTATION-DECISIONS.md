@@ -29,6 +29,16 @@ Este registro contém somente decisões técnicas reversíveis. Regras de negóc
 - A situação atual agrega somente tarefas principais (`parentCycleId = null`) por sua identidade permanente e ciclo atual. Subtarefas não são somadas aos indicadores da tarefa principal; permanecem visíveis como registros independentes no relatório detalhado.
 - Indicadores históricos usam ciclos: criação por `openedAt` e conclusão/cancelamento por `closedAt`, ambos dentro do período filtrado. A taxa de conclusão é `ciclos concluídos / (ciclos concluídos + cancelados)`, sem misturar esses números com as contagens atuais.
 - Atraso e prazo próximo são derivados no instante da consulta; tempo médio reaproveita o cálculo de expediente, pausas e versão histórica de calendário da Fase 4.
+- Na revisão da Fase 8, os filtros de estado e situação de prazo passaram a ser combinados por interseção, inclusive quando incompatíveis (resultado vazio), sem sobrescrever o estado solicitado.
+- Filtros históricos são aplicados ao próprio ciclo consultado, não ao ciclo atual da tarefa. O filtro de responsável histórico considera vínculos daquele ciclo, inclusive encerrados; na situação atual e no relatório, considera somente a atribuição vigente. Isso preserva a pesquisa dos ciclos concluídos após o encerramento da atribuição.
+- A verificação adicional MariaDB usa dados isolados em transação revertida ao final, sem necessidade de migração de schema para esta revisão.
+- Consultas atuais e relatório excluem tarefas sem `currentCycleId` antes da contagem e paginação. A suíte de integridade cria identidades sem ciclo para testar constraints; esses registros não devem provocar erro 500 no relatório.
+
+## 2026-11-12 — Provisionamento local autorizado
+
+- Após confirmar que não havia bancos `seaf*` nesta instalação do XAMPP, o usuário autorizou criar e inicializar `seaf_gestao_dev` e `seaf_gestao_test`.
+- Ambos foram criados com `utf8mb4` e collation `utf8mb4_unicode_ci`, receberam as três migrações versionadas via `db:migrate:deploy` e o seed dos quatro perfis. Nenhum banco existente foi apagado ou recriado.
+- O arquivo local `bdseaf.sql` não foi importado. Não foram criados usuários administrativos nem tarefas no desenvolvimento; dados automatizados foram gravados somente em `seaf_gestao_test`.
 
 ## 2026-11-11 — Fase 0: base
 
