@@ -7,7 +7,7 @@
   --color-surface: #ffffff;
   --color-background: #f5f7fb;
   --color-text: #17233c;
-  --color-muted: #64748b;
+  --color-muted: #526176;
   --color-border: #dce3ef;
   --color-success: #217a55;
   --color-warning: #a8620a;
@@ -38,6 +38,11 @@ button,
 a {
   -webkit-tap-highlight-color: transparent;
 }
+
+input, select, textarea { min-width: 0; }
+main { overflow-wrap: anywhere; }
+.action-primary, .action-secondary, .action-danger { white-space: nowrap; flex-shrink: 0; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--color-brand-700); outline-offset: 3px; }
 
 @layer components {
   .field { @apply min-h-11 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-700; }

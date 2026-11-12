@@ -24,16 +24,16 @@ describe('galeria de imagens', () => {
     });
   });
 
-  it('apresenta a Ã¡rea protegida e a prÃ©-visualizaÃ§Ã£o antes do envio', async () => {
+  it('apresenta a área protegida e a pré-visualização antes do envio', async () => {
     render(<ImageGalleryPanel taskId="task-1" cycleVersion={3} />);
     await screen.findByText('Nenhuma imagem anexada.');
     const input = screen.getByLabelText(/Selecionar imagens/i);
     fireEvent.change(input, { target: { files: [new File(['png'], 'evidencia.png', { type: 'image/png' })] } });
-    expect(screen.getByAltText('PrÃ©-visualizaÃ§Ã£o de evidencia.png')).toBeInTheDocument();
+    expect(screen.getByAltText('Pré-visualização de evidencia.png')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Enviar 1 imagem/i })).toBeInTheDocument();
   });
 
-  it('informa validaÃ§Ã£o de extensÃ£o e tamanho antes do upload', async () => {
+  it('informa validação de extensão e tamanho antes do upload', async () => {
     render(<ImageGalleryPanel taskId="task-1" cycleVersion={3} />);
     await screen.findByText('Nenhuma imagem anexada.');
     const input = screen.getByLabelText(/Selecionar imagens/i);

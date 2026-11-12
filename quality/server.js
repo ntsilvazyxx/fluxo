@@ -1,0 +1,14 @@
+import { testDatabase, checkDatabase } from './test-database.js';
+import { randomBytes } from 'node:crypto';
+const { url, prisma } = testDatabase();
+await checkDatabase(prisma);
+process.env.DATABASE_URL = url;
+process.env.NODE_ENV = 'test';
+process.env.MAIL_ENABLED = '0';
+process.env.AUTH_DATA_ENCRYPTION_KEY ||= randomBytes(32).toString('hex');
+const { env } = await import('../backend/src/config/env.js');
+const { createApp } = await import('../backend/src/app.js');
+const config = { ...env, corsOrigins: ['http://127.0.0.1:4179'], accessTokenTtlSeconds: 4, loginMaxAttempts: 200, imageStoragePath: new URL('../.artifacts/images/', import.meta.url).pathname.replace(/^\/(\w:)/, '$1') };
+const app = createApp({ prisma, config, startOutboxWorker: false });
+const server = app.listen(3109, '127.0.0.1', () => console.info('QA9 API 127.0.0.1:3109 / seaf_gestao_test'));
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(async () => { await prisma.$disconnect(); process.exit(0); }));

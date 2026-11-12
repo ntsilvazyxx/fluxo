@@ -1,5 +1,7 @@
 # SDD 10 — Implantação e operação (planejamento)
 
+> Alteração proposta em 2026-11-12: a política técnica solicitada é login do ADMIN MASTER somente por e-mail e senha. O requisito MFA de referência não foi cumprido nem dispensado institucionalmente; a exceção de segurança precisa de aprovação formal antes da produção. Acrescentar esse aceite ao checklist de HTTPS, SMTP, cofre, backups e controles operacionais. Prontidão: NÃO APTO enquanto houver requisitos institucionais ou controles críticos não homologados. Ver `docs/AUTHENTICATION-SECURITY.md`.
+
 ## Ambientes
 `development`, `test`, `staging`, `production`, com configurações e segredos separados. MySQL InnoDB com backup automatizado; API Node.js, frontend React servido estaticamente, worker de outbox e scheduler de lembretes; armazenamento de imagens privado. Escolha de hospedagem e provedor de e-mail pendentes de aprovação.
 

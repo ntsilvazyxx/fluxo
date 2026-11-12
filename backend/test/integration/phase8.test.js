@@ -31,7 +31,7 @@ suite('Fase 8 - autorização de indicadores no MariaDB real', () => {
     try {
       if (createdIds.length) {
         await prisma.userSession.deleteMany({ where: { userId: { in: createdIds } } });
-        await prisma.user.deleteMany({ where: { id: { in: createdIds } } });
+        await prisma.user.updateMany({ where: { id: { in: createdIds } }, data: { isActive: false, deletedAt: new Date() } });
       }
     } finally { await prisma.$disconnect(); }
   });

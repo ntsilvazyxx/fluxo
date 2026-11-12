@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'node:url';
+import { validateProductionConfig } from './production-policy.js';
 
 dotenv.config({ path: new URL('../../../.env', import.meta.url), quiet: true });
 
@@ -44,6 +45,7 @@ export const env = Object.freeze({
   port: parsePort(process.env.PORT),
   corsOrigins: parseOrigins(process.env.CORS_ORIGINS),
   jwtAccessSecret: required('JWT_ACCESS_SECRET'),
+  authDataEncryptionKey: process.env.AUTH_DATA_ENCRYPTION_KEY ?? '',
   accessTokenTtlSeconds: parsePositiveInteger(
     'ACCESS_TOKEN_TTL_SECONDS',
     process.env.ACCESS_TOKEN_TTL_SECONDS,
@@ -76,9 +78,14 @@ export const env = Object.freeze({
   mailEnabled: process.env.MAIL_ENABLED === '1',
   mailHost: process.env.MAIL_HOST ?? 'localhost',
   mailPort: parsePositiveInteger('MAIL_PORT', process.env.MAIL_PORT, 25),
+  mailConnectionTimeout: parsePositiveInteger('MAIL_CONNECTION_TIMEOUT_MS', process.env.MAIL_CONNECTION_TIMEOUT_MS, 10000),
+  mailGreetingTimeout: parsePositiveInteger('MAIL_GREETING_TIMEOUT_MS', process.env.MAIL_GREETING_TIMEOUT_MS, 10000),
+  mailSocketTimeout: parsePositiveInteger('MAIL_SOCKET_TIMEOUT_MS', process.env.MAIL_SOCKET_TIMEOUT_MS, 30000),
   mailUser: process.env.MAIL_USER ?? '',
   mailPass: process.env.MAIL_PASS ?? '',
   mailFrom: process.env.MAIL_FROM ?? 'seaf@instituto.local',
   mailFromName: process.env.MAIL_FROM_NAME ?? 'SEAF Gestão de Tarefas',
   appBaseUrl: process.env.APP_BASE_URL ?? 'http://localhost:5173',
 });
+
+validateProductionConfig(env);

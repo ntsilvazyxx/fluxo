@@ -11,4 +11,7 @@ backend/storage/
 Thumbs.db
 .idea/
 .vscode/
+.artifacts/
+playwright-report/
+test-results/
 

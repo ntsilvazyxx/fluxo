@@ -9,7 +9,7 @@
     "start": "node src/server.js",
     "lint": "eslint .",
     "test": "npm run prisma:generate && node --test",
-    "test:integration": "npm run prisma:generate && dotenv -e ../.env -- node --test test/integration/*.test.js",
+    "test:integration": "npm run prisma:generate && dotenv -e ../.env -- node scripts/run-integration.js",
     "db:check": "dotenv -e ../.env -- node scripts/check-database.js",
     "db:seed": "dotenv -e ../.env -- prisma db seed",
     "db:migrate:deploy": "dotenv -e ../.env -- prisma migrate deploy",
@@ -26,7 +26,7 @@
     "dotenv": "^17.2.3",
     "express": "^5.3.0",
     "express-rate-limit": "^8.7.4",
-    "file-type": "^20.5.0",
+    "file-type": "^22.3.0",
     "helmet": "^8.1.0",
     "jose": "^6.2.17",
     "luxon": "^3.7.2",
@@ -43,6 +43,6 @@
     "supertest": "^7.1.4"
   },
   "engines": {
-    "node": ">=20.19.0"
+    "node": ">=22.12.0"
   }
 }

@@ -2,19 +2,20 @@ import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthContext.jsx';
 import { AppShell } from './layout/AppShell.jsx';
-import { CalendarPage } from './pages/CalendarPage.jsx';
-import { KanbanPage } from './pages/KanbanPage.jsx';
+const CalendarPage = lazy(() => import('./pages/CalendarPage.jsx').then((module) => ({ default: module.CalendarPage })));
+const KanbanPage = lazy(() => import('./pages/KanbanPage.jsx').then((module) => ({ default: module.KanbanPage })));
 import { LoginPage } from './pages/LoginPage.jsx';
-import { MyTasksPage } from './pages/MyTasksPage.jsx';
-import { TaskDetailPage } from './pages/TaskDetailPage.jsx';
-import { TaskFormPage } from './pages/TaskFormPage.jsx';
-import { NotificationsPage } from './pages/NotificationsPage.jsx';
-import { TaskHistoryPage } from './pages/TaskHistoryPage.jsx';
-import { TeamsPage } from './pages/TeamsPage.jsx';
-import { UsersPage } from './pages/UsersPage.jsx';
+const MyTasksPage = lazy(() => import('./pages/MyTasksPage.jsx').then((module) => ({ default: module.MyTasksPage })));
+const TaskDetailPage = lazy(() => import('./pages/TaskDetailPage.jsx').then((module) => ({ default: module.TaskDetailPage })));
+const TaskFormPage = lazy(() => import('./pages/TaskFormPage.jsx').then((module) => ({ default: module.TaskFormPage })));
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage.jsx').then((module) => ({ default: module.NotificationsPage })));
+const TaskHistoryPage = lazy(() => import('./pages/TaskHistoryPage.jsx').then((module) => ({ default: module.TaskHistoryPage })));
+const TeamsPage = lazy(() => import('./pages/TeamsPage.jsx').then((module) => ({ default: module.TeamsPage })));
+const UsersPage = lazy(() => import('./pages/UsersPage.jsx').then((module) => ({ default: module.UsersPage })));
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage.jsx').then((module) => ({ default: module.DashboardPage })));
 const ReportsPage = lazy(() => import('./pages/ReportsPage.jsx').then((module) => ({ default: module.ReportsPage })));
+const PasswordRecoveryPage = lazy(() => import('./pages/PasswordRecoveryPage.jsx').then((module) => ({ default: module.PasswordRecoveryPage })));
 
 function Protected({ children }) {
   const { status } = useAuth();
@@ -29,11 +30,12 @@ function Roles({ allowed, children }) {
 
 const managers = ['ADMIN_MASTER', 'SECRETARY', 'MANAGER'];
 const analysts = ['SECRETARY', 'MANAGER'];
-const LoadingPage = ({ children }) => <Suspense fallback={<p className="text-muted">Carregando\u2026</p>}>{children}</Suspense>;
+const LoadingPage = ({ children }) => <Suspense fallback={<p className="text-muted">Carregando…</p>}>{children}</Suspense>;
 
 function AppRoutes() {
   const { status } = useAuth();
   return <Routes>
+    <Route path="/recuperar-senha" element={<PasswordRecoveryPage />} />
     <Route path="/login" element={status === 'authenticated' ? <Navigate to="/" replace /> : <LoginPage />} />
     <Route path="/" element={<Protected><AppShell /></Protected>}>
       <Route index element={<Roles allowed={analysts}><LoadingPage><DashboardPage /></LoadingPage></Roles>} />
@@ -54,5 +56,5 @@ function AppRoutes() {
 }
 
 export function App() {
-  return <AuthProvider><AppRoutes /></AuthProvider>;
+  return <AuthProvider><Suspense fallback={<p role="status">Carregando página…</p>}><AppRoutes /></Suspense></AuthProvider>;
 }

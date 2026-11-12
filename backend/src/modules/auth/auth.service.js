@@ -10,6 +10,8 @@ import {
   signAccessToken,
 } from '../../shared/security/tokens.js';
 import { presentUser } from '../users/user.presenter.js';
+import { authAudit, issueSession } from './session.service.js';
+import { encryptionKey, seal } from '../../shared/security/auth-secrets.js';
 
 const dummyPasswordHash = hashPassword('Invalid-password-for-timing-only-2026');
 
@@ -37,30 +39,13 @@ export const createAuthService = ({ prisma, config, passwordResetNotifier }) => 
       throw authenticationError();
     }
 
-    const refreshToken = generateOpaqueToken();
-    const sessionId = randomUUID();
-    const expiresAt = expiresFromNow(config.refreshTokenTtlDays * 86_400_000);
-
-    await prisma.userSession.create({
-      data: {
-        id: sessionId,
-        userId: user.id,
-        refreshTokenHash: hashOpaqueToken(refreshToken),
-        expiresAt,
-      },
+    return prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(Prisma.sql`SELECT id FROM users WHERE id=${user.id} FOR UPDATE`);
+      const current = await tx.user.findFirst({ where: { id: user.id, isActive: true, deletedAt: null }, include: { role: true } });
+      if (!current || current.version !== user.version || current.passwordHash !== user.passwordHash) throw authenticationError();
+      const session = await issueSession(tx, current, config);
+      await authAudit(tx, user.id, 'LOGIN_SUCCEEDED'); return session;
     });
-
-    const accessToken = await signAccessToken(
-      { userId: user.id, sessionId, roleCode: user.role.code },
-      config,
-    );
-
-    return {
-      accessToken,
-      expiresIn: config.accessTokenTtlSeconds,
-      refreshToken,
-      user: presentUser(user),
-    };
   },
 
   async refresh(refreshToken) {
@@ -134,43 +119,33 @@ export const createAuthService = ({ prisma, config, passwordResetNotifier }) => 
   },
 
   async requestPasswordReset(email) {
-    const user = await prisma.user.findFirst({
-      where: {
-        emailNormalized: email.trim().toLowerCase(),
-        isActive: true,
-        deletedAt: null,
-      },
-    });
-
+    if (!passwordResetNotifier) encryptionKey(config);
+    const user = await prisma.user.findFirst({ where: { emailNormalized: email.trim().toLowerCase(), isActive: true, deletedAt: null } });
     if (!user) return;
-
-    const token = generateOpaqueToken();
-    const now = new Date();
-
-    await prisma.$transaction([
-      prisma.passwordResetToken.updateMany({
-        where: { userId: user.id, usedAt: null },
-        data: { usedAt: now },
-      }),
-      prisma.passwordResetToken.create({
-        data: {
-          id: randomUUID(),
-          userId: user.id,
-          tokenHash: hashOpaqueToken(token),
-          expiresAt: expiresFromNow(config.passwordResetTtlMinutes * 60_000),
-        },
-      }),
-    ]);
-
-    await passwordResetNotifier({ email: user.emailNormalized, token });
+    const token = generateOpaqueToken(); const id = randomUUID(); const now = new Date();
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(Prisma.sql`SELECT id FROM users WHERE id=${user.id} FOR UPDATE`);
+      const active = await tx.user.findFirst({ where: { id: user.id, isActive: true, deletedAt: null } });
+      if (!active) return;
+      await tx.passwordResetToken.updateMany({ where: { userId: user.id, usedAt: null }, data: { usedAt: now } });
+      await tx.passwordResetToken.create({ data: { id, userId: user.id, tokenHash: hashOpaqueToken(token), expiresAt: expiresFromNow(config.passwordResetTtlMinutes * 60000) } });
+      if (!passwordResetNotifier) await tx.outboxEvent.create({ data: { id: randomUUID(), eventType: 'PASSWORD_RESET_REQUESTED', dedupeKey: 'password-reset:' + id, payloadJson: { resetId: id, tokenCiphertext: seal(token, id, config) } } });
+      await authAudit(tx, user.id, 'PASSWORD_RESET_REQUESTED', id);
+    }, { isolationLevel: 'ReadCommitted', maxWait: 5000, timeout: 10000 });
+    if (passwordResetNotifier) await passwordResetNotifier({ email: user.emailNormalized, token });
   },
 
   async resetPassword({ token, password }) {
     const tokenHash = hashOpaqueToken(token);
     const passwordHash = await hashPassword(password);
+    const pointer = await prisma.passwordResetToken.findUnique({ where: { tokenHash } });
+    if (!pointer) throw new AppError(400, 'INVALID_RESET_TOKEN', 'Token inválido ou expirado.');
 
     await prisma.$transaction(
       async (transaction) => {
+        await transaction.$queryRaw(Prisma.sql`SELECT id FROM users WHERE id=${pointer.userId} FOR UPDATE`);
+        const activeUser = await transaction.user.findFirst({ where: { id: pointer.userId, isActive: true, deletedAt: null } });
+        if (!activeUser) throw new AppError(400, 'INVALID_RESET_TOKEN', 'Token inválido ou expirado.');
         const tokens = await transaction.$queryRaw(
           Prisma.sql`SELECT id, userId, expiresAt, usedAt
             FROM password_reset_tokens
@@ -199,6 +174,8 @@ export const createAuthService = ({ prisma, config, passwordResetNotifier }) => 
           where: { userId: resetToken.userId, revokedAt: null },
           data: { revokedAt: new Date() },
         });
+        await transaction.passwordResetToken.updateMany({ where: { userId: resetToken.userId, usedAt: null }, data: { usedAt: new Date() } });
+        await authAudit(transaction, resetToken.userId, 'PASSWORD_RESET_COMPLETED', resetToken.id);
       },
       { isolationLevel: 'ReadCommitted', maxWait: 5_000, timeout: 10_000 },
     );

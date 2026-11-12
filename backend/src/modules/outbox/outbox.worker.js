@@ -6,8 +6,8 @@ const wait = (ms) => new Promise((resolve) => {
   timer.unref();
 });
 
-export const createOutboxWorker = ({ prisma, emailSender, reminderScheduler = createReminderScheduler({ prisma }) }) => {
-  const service = createOutboxService({ emailSender });
+export const createOutboxWorker = ({ prisma, emailSender, config, reminderScheduler = createReminderScheduler({ prisma }) }) => {
+  const service = createOutboxService({ emailSender, config });
   let running = false;
 
   const processOne = async () => {
@@ -48,7 +48,7 @@ export const createOutboxWorker = ({ prisma, emailSender, reminderScheduler = cr
       try {
         await runOnce();
       } catch (error) {
-        console.error('[OUTBOX] Erro no loop do worker:', error.message);
+        console.error(JSON.stringify({ event: 'outbox_loop_error', type: error.name ?? 'Error' }));
       }
       await wait(intervalMs);
     }

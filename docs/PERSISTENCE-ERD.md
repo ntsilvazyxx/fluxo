@@ -36,12 +36,15 @@ erDiagram
   USER ||--o{ IDEMPOTENCY_KEY : utiliza
   USER ||--o{ USER_SESSION : mantem
   USER ||--o{ PASSWORD_RESET_TOKEN : recupera
-  USER ||--o{ MFA_CREDENTIAL : protege
+  USER ||--o{ LEGACY_MFA_CREDENTIAL : preserva_arquivo
+  USER ||--o{ LEGACY_MFA_AUTH_CHALLENGE : preserva_arquivo
   USER ||--o{ NOTIFICATION_PREFERENCE : configura
   USER ||--o{ SYSTEM_SETTING : atualiza
 ```
 
 ## Regras estruturais principais
+
+Atualização da Fase 9: credenciais e desafios de MFA foram arquivados sem descarte pela migração compensatória `20261113001000_retire_mfa_preserve_history`. Modelos legados ignorados pelo cliente Prisma; não participam da autenticação. A coluna `user_sessions.legacyMfaVerifiedAt` preserva o timestamp anterior, também ignorado. Login por e-mail/senha é alteração técnica solicitada, com exceção institucional pendente (ver `AUTHENTICATION-SECURITY.md`).
 
 - Uma tarefa possui vários ciclos históricos, mas apenas um ciclo aberto.
 - Um ciclo possui várias atribuições históricas, mas apenas uma atribuição atual.

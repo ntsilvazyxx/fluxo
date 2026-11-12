@@ -11,18 +11,21 @@ import { notFound } from './middlewares/not-found.js';
 import { createApiRouter } from './routes/index.js';
 import { createOutboxWorker } from './modules/outbox/outbox.worker.js';
 import { createEmailSender } from './modules/outbox/outbox.sender.js';
+import { AppError } from './shared/errors/app-error.js';
 
 export const createApp = ({
   prisma = createPrismaClient(),
   config = env,
-  passwordResetNotifier = async () => {},
+  passwordResetNotifier,
   imageStorage,
   startOutboxWorker = false,
 } = {}) => {
+  config = { ...env, ...config };
   const app = express();
   const emailSender = createEmailSender({ config });
 
   app.disable('x-powered-by');
+  app.use(correlationId);
   app.use(helmet());
   app.use(
     cors({
@@ -32,12 +35,11 @@ export const createApp = ({
           return;
         }
 
-        callback(new Error('Origem não permitida pelo CORS.'));
+        callback(new AppError(403, 'ORIGIN_NOT_ALLOWED', 'Origem não permitida pelo CORS.'));
       },
       credentials: true,
     }),
   );
-  app.use(correlationId);
   app.use(cookieParser());
   app.use(express.json({ limit: '1mb' }));
 
@@ -46,7 +48,7 @@ export const createApp = ({
   app.use(errorHandler);
 
   if (startOutboxWorker) {
-    const outboxWorker = createOutboxWorker({ prisma, emailSender });
+    const outboxWorker = createOutboxWorker({ prisma, emailSender, config });
     app.locals.outboxWorker = outboxWorker;
     void outboxWorker.start();
   }

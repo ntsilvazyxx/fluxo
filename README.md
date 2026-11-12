@@ -2,7 +2,7 @@
 
 Base técnica do sistema institucional para gestão de tarefas administrativas da Secretaria de Estado de Agricultura Familiar de Mato Grosso.
 
-> Estado atual: **Fase 5 — Subtarefas, Ciclos, Reabertura e Restauração**. Imagens, e-mails reais e dashboard analítico permanecem nas fases futuras.
+> Estado atual: **Fase 9 — Homologação final e preparação para implantação**. Consulte `docs/PHASE-9-VALIDATION.md` para resultados e bloqueios operacionais. A implantação não está autorizada.
 
 ## Stack
 
@@ -13,7 +13,7 @@ Base técnica do sistema institucional para gestão de tarefas administrativas d
 
 ## Pré-requisitos
 
-- Node.js 20.19 ou superior.
+- Node.js 22.12 ou superior (ambiente validado: Node.js 24.16).
 - npm 10 ou superior.
 - MariaDB 10.11 ou superior.
 
@@ -79,6 +79,21 @@ npm run build
 npm run prisma:validate
 ```
 
+### Homologação isolada da Fase 9
+
+Configure `TEST_DATABASE_URL` exclusivamente para `seaf_gestao_test`. Não execute carga ou testes contra desenvolvimento. Com o schema de testes já migrado e os perfis disponíveis:
+
+```powershell
+npm.cmd ci
+npm.cmd exec -- playwright install chromium
+npm.cmd run test:e2e
+npm.cmd run test:performance
+```
+
+O Playwright inicia API em `127.0.0.1:3109` e Vite em `127.0.0.1:4179`, recusa reutilizar serviços existentes e usa credenciais aleatórias de teste. Screenshots, traces, relatório JSON e métricas ficam em `.artifacts/`, ignorado pelo Git. Traces contêm tráfego autenticado: acesso restrito e descarte após análise. As fixtures têm UUID por execução; históricos não são removidos e o banco acumula dados de teste.
+
+Consulte `docs/DEPLOYMENT-RUNBOOK.md` para preparação operacional. Não use Vite dev server ou root sem senha em produção.
+
 O Prisma está configurado para MariaDB 10.11 e possui migrações versionadas. O datasource Prisma continua usando `provider = "mysql"`, como previsto pelo conector oficial.
 
 ## Persistência e migrações
@@ -99,15 +114,15 @@ Nunca use `prisma db push` como substituto das migrações. Os scripts não exec
 
 ### Testes MariaDB reais
 
-Use um banco descartável cujo nome contenha `test`, aplique as migrações e o seed, e então habilite explicitamente a suíte:
+Use exclusivamente `seaf_gestao_test`, com as migrações e o seed já aplicados, e então habilite explicitamente a suíte:
 
 ```powershell
 $env:RUN_DATABASE_INTEGRATION='1'
-$env:TEST_DATABASE_URL='mysql://usuario:senha@127.0.0.1:3306/seaf_tasks_test'
+$env:TEST_DATABASE_URL='mysql://usuario:senha@127.0.0.1:3306/seaf_gestao_test'
 npm run test:integration
 ```
 
-A suíte recusa servidores que não se identifiquem como MariaDB 10.11.x. Quando a flag não está ativa, os testes de banco aparecem como ignorados, nunca como aprovados.
+A suíte exige MariaDB 10.11.x. O comando dedicado `test:integration` recusa flag ausente ou banco diferente de `seaf_gestao_test`. Em `npm test`, sem a flag ativa, as suítes de banco aparecem como ignoradas, nunca como aprovadas.
 
 ## Scripts principais
 
@@ -192,6 +207,12 @@ Subtarefas são tarefas completas vinculadas ao ciclo específico da principal. 
 Reabertura de tarefa concluída e restauração de tarefa cancelada criam um novo ciclo `PENDING`, sem responsável e sem prazo. O ciclo anterior permanece imutável e as subtarefas antigas não são reativadas.
 
 Principais rotas: `GET/POST /api/v1/tasks/:id/subtasks`, `POST /api/v1/tasks/:id/reopen` e `POST /api/v1/tasks/:id/restore`.
+
+## Estabilização da Fase 9
+
+Por solicitação do responsável, todos os perfis, inclusive ADMIN MASTER, entram somente por e-mail e senha. TOTP e códigos de segundo fator foram retirados. Trata-se de mudança de requisito com exceção de segurança **pendente de aprovação institucional**, não de cumprimento de MFA. A prontidão permanece **NÃO APTO para produção**. Consulte a [proposta e os controles preservados](docs/AUTHENTICATION-SECURITY.md).
+
+A recuperação de senha por e-mail continua usando outbox, SMTP configurável e `AUTH_DATA_ENCRYPTION_KEY` independente. A migração histórica `20261112233000_auth_mfa_sessions` foi preservada e a compensatória `20261113001000_retire_mfa_preserve_history` arquiva seus dados sem descartá-los. Ambas foram aplicadas somente em `seaf_gestao_test`; desenvolvimento não foi migrado nesta revisão. Consulte o [runbook](docs/DEPLOYMENT-RUNBOOK.md) e a seção 14 de [PHASE-9-VALIDATION.md](docs/PHASE-9-VALIDATION.md).
 
 ## Fase 8 — Dashboard e relatórios gerenciais
 

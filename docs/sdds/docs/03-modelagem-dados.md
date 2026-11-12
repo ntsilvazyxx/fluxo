@@ -1,5 +1,7 @@
 # SDD 03 — Modelo lógico de dados (MySQL + Prisma)
 
+> Revisão proposta em 2026-11-12, autorizada tecnicamente pelo responsável e pendente de aprovação institucional: login somente por e-mail/senha, inclusive ADMIN MASTER. Estruturas MFA citadas abaixo são referência histórica; nesta revisão ficam arquivadas em `legacy_mfa_credentials`, `legacy_mfa_auth_challenges` e `user_sessions.legacyMfaVerifiedAt`, sem uso no cliente ativo e sem descarte. Tokens de recuperação de senha continuam ativos. A migração executada é preservada e sucedida por compensatória. Ver `docs/AUTHENTICATION-SECURITY.md`; MFA não é declarado cumprido.
+
 ## Convenções
 - MySQL 8+ InnoDB, `utf8mb4`, collation consistente; IDs `CHAR(36)` ou `VARCHAR(36)` UUID; número público sequencial `BIGINT UNSIGNED` único.
 - `DATETIME(3)` em UTC na aplicação (MySQL DATETIME não carrega timezone). Todas as datas de eventos imutáveis quando históricas.

@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { ArrowLeft, CalendarClock, Check, Pencil, RotateCcw, Timer, UserRound, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { TaskLifecyclePanel } from '../tasks/TaskLifecyclePanel.jsx';
 import { ImageGalleryPanel } from '../tasks/ImageGalleryPanel.jsx';
@@ -15,6 +15,7 @@ const duration = (value) => {
 
 export function TaskDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { request, user } = useAuth();
   const [task, setTask] = useState(null);
   const [users, setUsers] = useState([]);
@@ -35,9 +36,12 @@ export function TaskDetailPage() {
     setBusy(true);
     setError('');
     try {
-      const response = await request(path, { method, headers: { 'idempotency-key': key() }, body: JSON.stringify(data) });
+      const body = { ...data };
+      if (body.reason === '') delete body.reason;
+      const response = await request(path, { method, headers: { 'idempotency-key': key() }, body: JSON.stringify(body) });
       const json = await response.json();
       if (!response.ok) throw new Error(json.error?.message ?? 'Não foi possível concluir a operação.');
+      if (path.endsWith('/reject')) { navigate('/minhas-tarefas'); return true; }
       await load();
       return true;
     } catch (cause) {
@@ -72,7 +76,7 @@ export function TaskDetailPage() {
       {own && currentCycle.status === 'AWAITING_ACCEPTANCE' && <Action title="Responder atribuição"><button disabled={busy} onClick={() => mutate(`/assignments/${currentAssignment.id}/accept`, { expectedVersion: currentCycle.version })} className="action-primary"><Check size={18} />Aceitar tarefa</button><ReasonAction label="Rejeitar atribuição" danger busy={busy} onSubmit={(reason) => mutate(`/assignments/${currentAssignment.id}/reject`, { expectedVersion: currentCycle.version, reason })} /></Action>}
       {own && currentCycle.status === 'IN_PROGRESS' && !pending && <Action title="Solicitações"><RequestActions busy={busy} version={currentCycle.version} taskId={id} mutate={mutate} /></Action>}
       {pending && <Action title="Solicitação pendente"><p className="text-sm text-muted">{pending.type === 'RETURN' ? 'Devolução' : 'Prorrogação'} solicitada em {new Date(pending.createdAt).toLocaleString('pt-BR')}.</p><p className="text-sm">{pending.reason}</p>{canManage && <DecisionActions requestItem={pending} version={currentCycle.version} busy={busy} mutate={mutate} requireReason={user.role.code === 'ADMIN_MASTER'} />}</Action>}
-      {own && currentCycle.status === 'IN_PROGRESS' && !pending && !openSubtasks.length && <Action title="Concluir tarefa"><TextAction label="Descrição dos resultados" button="Concluir tarefa" busy={busy} onSubmit={(completionText) => mutate(`/tasks/${id}/complete`, { expectedVersion: currentCycle.version, completionText })} /></Action>}
+      {own && currentCycle.status === 'IN_PROGRESS' && pending?.type !== 'RETURN' && !openSubtasks.length && <Action title="Concluir tarefa"><TextAction label="Descrição dos resultados" button="Concluir tarefa" busy={busy} onSubmit={(completionText) => mutate(`/tasks/${id}/complete`, { expectedVersion: currentCycle.version, completionText })} /></Action>}
       {canManage && ['PENDING', 'AWAITING_ACCEPTANCE', 'IN_PROGRESS'].includes(currentCycle.status) && <Action title={currentAssignment ? 'Reatribuir responsável' : 'Atribuir responsável'}><AssignmentForm users={users} version={currentCycle.version} busy={busy} onSubmit={(data) => mutate(`/tasks/${id}/assignments`, data)} /></Action>}
       {canManage && ['PENDING', 'AWAITING_ACCEPTANCE', 'IN_PROGRESS'].includes(currentCycle.status) && <Action title="Editar tarefa"><EditForm cycle={currentCycle} busy={busy} onSubmit={(data) => mutate(`/tasks/${id}`, data, 'PATCH')} /></Action>}
       {canManage && ['PENDING', 'AWAITING_ACCEPTANCE', 'IN_PROGRESS'].includes(currentCycle.status) && <Action title="Cancelar tarefa"><ReasonAction label="Cancelar definitivamente" danger busy={busy} onSubmit={(reason) => mutate(`/tasks/${id}/cancel`, { expectedVersion: currentCycle.version, reason })} /></Action>}
@@ -92,7 +96,7 @@ function RequestHistory({ cycle }) {
 
 function RequestActions({ taskId, version, mutate, busy }) {
   const [type, setType] = useState('RETURN');
-  return <form onSubmit={(event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); mutate(`/tasks/${taskId}/requests`, { type, reason: data.reason, expectedVersion: version, ...(type === 'EXTENSION' ? { proposedDeadlineAt: new Date(data.proposedDeadlineAt).toISOString() } : {}) }); }} className="space-y-3"><select className="field" value={type} onChange={(event) => setType(event.target.value)}><option value="RETURN">Solicitar devolução</option><option value="EXTENSION">Solicitar prorrogação</option></select>{type === 'EXTENSION' && <input className="field" name="proposedDeadlineAt" type="datetime-local" required />}<textarea className="field" name="reason" placeholder="Justificativa obrigatória" minLength="5" required /><button disabled={busy} className="action-secondary"><RotateCcw size={18} />Enviar solicitação</button></form>;
+  return <form onSubmit={(event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); mutate(`/tasks/${taskId}/requests`, { type, reason: data.reason, expectedVersion: version, ...(type === 'EXTENSION' ? { proposedDeadlineAt: new Date(data.proposedDeadlineAt).toISOString() } : {}) }); }} className="space-y-3"><select className="field" value={type} onChange={(event) => setType(event.target.value)}><option value="RETURN">Solicitar devolução</option><option value="EXTENSION">Solicitar prorrogação</option></select>{type === 'EXTENSION' && <input className="field" name="proposedDeadlineAt" type="datetime-local" required />}<textarea className="field" aria-label="Justificativa" name="reason" placeholder="Justificativa obrigatória" minLength="5" required /><button disabled={busy} className="action-secondary"><RotateCcw size={18} />Enviar solicitação</button></form>;
 }
 
 function DecisionActions({ requestItem, version, mutate, busy, requireReason }) {
@@ -104,5 +108,5 @@ function Info({ icon: Icon, label, value }) { return <div><dt className="flex it
 function Action({ title, children }) { return <section className="rounded-2xl border border-border bg-white p-5"><h2 className="mb-4 font-extrabold">{title}</h2><div className="space-y-3">{children}</div></section>; }
 function ReasonAction({ label, onSubmit, busy, danger }) { const [reason, setReason] = useState(''); return <form onSubmit={(event) => { event.preventDefault(); onSubmit(reason); }} className="space-y-3"><textarea aria-label="Justificativa" placeholder="Justificativa obrigatória" minLength="5" required value={reason} onChange={(event) => setReason(event.target.value)} className="field" /><button disabled={busy} className={danger ? 'action-danger' : 'action-secondary'}><X size={18} />{label}</button></form>; }
 function TextAction({ label, button, onSubmit, busy }) { const [value, setValue] = useState(''); return <form onSubmit={(event) => { event.preventDefault(); onSubmit(value); }}><textarea aria-label={label} placeholder={label} minLength="10" required value={value} onChange={(event) => setValue(event.target.value)} className="field" /><button disabled={busy} className="action-primary mt-3"><Check size={18} />{button}</button></form>; }
-function AssignmentForm({ users, version, onSubmit, busy }) { return <form onSubmit={(event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); onSubmit({ ...data, expectedVersion: version, deadlineAt: new Date(data.deadlineAt).toISOString() }); }} className="space-y-3"><select name="userId" required className="field"><option value="">Selecione o responsável</option>{users.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.name} · {item.role.label}</option>)}</select><input name="deadlineAt" type="datetime-local" required className="field" /><textarea name="reason" placeholder="Justificativa (obrigatória na reatribuição ou intervenção)" minLength="5" className="field" /><button disabled={busy} className="action-primary"><UserRound size={18} />Confirmar atribuição</button></form>; }
-function EditForm({ cycle, onSubmit, busy }) { return <form onSubmit={(event) => { event.preventDefault(); onSubmit({ ...Object.fromEntries(new FormData(event.currentTarget)), expectedVersion: cycle.version }); }} className="space-y-3"><input name="title" defaultValue={cycle.title} required className="field" /><textarea name="description" defaultValue={cycle.description} required className="field" /><select name="priority" defaultValue={cycle.priority} className="field"><option value="LOW">Baixa</option><option value="NORMAL">Normal</option><option value="HIGH">Alta</option><option value="URGENT">Urgente</option></select><textarea name="reason" placeholder="Justificativa da alteração" required minLength="5" className="field" /><button disabled={busy} className="action-secondary"><Pencil size={18} />Salvar alterações</button></form>; }
+function AssignmentForm({ users, version, onSubmit, busy }) { return <form onSubmit={(event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); onSubmit({ ...data, expectedVersion: version, deadlineAt: new Date(data.deadlineAt).toISOString() }); }} className="space-y-3"><select aria-label="Responsável" name="userId" required className="field"><option value="">Selecione o responsável</option>{users.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.name} · {item.role.label}</option>)}</select><input aria-label="Prazo" name="deadlineAt" type="datetime-local" required className="field" /><textarea aria-label="Justificativa" name="reason" placeholder="Justificativa (obrigatória na reatribuição ou intervenção)" minLength="5" className="field" /><button disabled={busy} className="action-primary"><UserRound size={18} />Confirmar atribuição</button></form>; }
+function EditForm({ cycle, onSubmit, busy }) { return <form onSubmit={(event) => { event.preventDefault(); onSubmit({ ...Object.fromEntries(new FormData(event.currentTarget)), expectedVersion: cycle.version }); }} className="space-y-3"><input aria-label="Título" name="title" defaultValue={cycle.title} required className="field" /><textarea aria-label="Descrição" name="description" defaultValue={cycle.description} required className="field" /><select aria-label="Prioridade" name="priority" defaultValue={cycle.priority} className="field"><option value="LOW">Baixa</option><option value="NORMAL">Normal</option><option value="HIGH">Alta</option><option value="URGENT">Urgente</option></select><textarea aria-label="Justificativa" name="reason" placeholder="Justificativa da alteração" required minLength="5" className="field" /><button disabled={busy} className="action-secondary"><Pencil size={18} />Salvar alterações</button></form>; }

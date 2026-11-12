@@ -6,6 +6,7 @@ import {
 import { presentUser } from '../users/user.presenter.js';
 
 const sendSession = (response, session, config) => {
+  response.set('Cache-Control', 'no-store');
   response.cookie(
     REFRESH_COOKIE_NAME,
     session.refreshToken,
@@ -44,7 +45,9 @@ export const createAuthController = ({ service, config }) => ({
   },
 
   forgotPassword: async (request, response) => {
-    await service.requestPasswordReset(request.validated.body.email);
+    const started = Date.now();
+    try { await service.requestPasswordReset(request.validated.body.email); }
+    finally { await new Promise((resolve) => setTimeout(resolve, Math.max(0, 200 - (Date.now() - started)))); }
     response.status(202).json({
       data: {
         message: 'Se a conta existir, as instruções de recuperação serão enviadas.',

@@ -1,5 +1,7 @@
 # SDD 12 — Registro de decisões e pendências
 
+> Registro de 2026-11-12: o responsável autorizou tecnicamente retirar TOTP/códigos de segundo fator e usar somente e-mail/senha inclusive para ADMIN MASTER. Isso substitui a política técnica anterior, mas não constitui aprovação institucional da exceção ao MFA do SDD 07. Aprovação formal e aceitação do risco administrativo permanecem pendentes, assim como os demais bloqueios operacionais. Dados MFA ficam arquivados sem descarte; recuperação de senha é preservada. Ver `docs/AUTHENTICATION-SECURITY.md`.
+
 ## Decisões confirmadas
 - Backend Node.js; **Express.js é proposta arquitetural do assistente**, não escolha explícita do usuário. Mantido como padrão sugerido até eventual revisão.
 - Banco MySQL + Prisma.

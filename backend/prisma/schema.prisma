@@ -117,8 +117,9 @@ model User {
   notifications           Notification[]
   idempotencyKeys         IdempotencyKey[]
   sessions                UserSession[]
+  legacyAuthChallenges    LegacyAuthChallenge[] @ignore
   passwordResetTokens     PasswordResetToken[]
-  mfaCredentials          MfaCredential[]
+  legacyMfaCredentials    LegacyMfaCredential[] @ignore
   notificationPreferences NotificationPreference[]
   settingsUpdated         SystemSetting[]          @relation("SystemSettingUpdater")
 
@@ -504,10 +505,27 @@ model UserSession {
   createdAt        DateTime  @default(now()) @db.DateTime(3)
   expiresAt        DateTime  @db.DateTime(3)
   revokedAt        DateTime? @db.DateTime(3)
+  legacyMfaVerifiedAt DateTime? @db.DateTime(3) @ignore
   user             User      @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@index([userId, revokedAt, expiresAt])
   @@map("user_sessions")
+}
+
+// Archived only: no generated client delegate or runtime authentication use.
+model LegacyAuthChallenge {
+  id String @id @db.Char(36)
+  userId String @db.Char(36)
+  tokenHash String @unique(map: "auth_challenges_tokenHash_key") @db.Char(64)
+  userVersion Int @db.UnsignedInt
+  enrollmentSecret String? @db.Text
+  attempts Int @default(0) @db.UnsignedInt
+  expiresAt DateTime @db.DateTime(3)
+  consumedAt DateTime? @db.DateTime(3)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "auth_challenges_userId_fkey")
+  @@index([userId, expiresAt], map: "auth_challenges_userId_expiresAt_idx")
+  @@map("legacy_mfa_auth_challenges")
+  @@ignore
 }
 
 model PasswordResetToken {
@@ -523,20 +541,21 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
-model MfaCredential {
+model LegacyMfaCredential {
   id               String            @id @db.Char(36)
   userId           String            @db.Char(36)
   type             MfaCredentialType
-  credentialId     String?           @unique @db.VarChar(512)
+  credentialId     String?           @unique(map: "mfa_credentials_credentialId_key") @db.VarChar(512)
   secretCiphertext String?           @db.Text
   credentialJson   Json?
   createdAt        DateTime          @default(now()) @db.DateTime(3)
   lastUsedAt       DateTime?         @db.DateTime(3)
   revokedAt        DateTime?         @db.DateTime(3)
-  user             User              @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "mfa_credentials_userId_fkey")
 
-  @@index([userId, revokedAt])
-  @@map("mfa_credentials")
+  @@index([userId, revokedAt], map: "mfa_credentials_userId_revokedAt_idx")
+  @@map("legacy_mfa_credentials")
+  @@ignore
 }
 
 model NotificationPreference {

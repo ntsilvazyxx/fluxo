@@ -1,5 +1,7 @@
 # SDD 04 — Backend Node.js + Express e API REST
 
+> Alteração proposta em 2026-11-12: `POST /auth/login` autentica todos os perfis, inclusive ADMIN MASTER, somente por e-mail e senha e emite sessão normal; não há rotas TOTP/cadastro/validação/revogação de segundo fator. JWT, refresh, cookies, recuperação de senha, RBAC, isolamento e auditoria permanecem. Autorização técnica do responsável recebida; exceção de segurança ao SDD 07 pendente de aprovação institucional. Ver `docs/AUTHENTICATION-SECURITY.md`.
+
 ## Organização
 Monólito modular JavaScript (ESM), camadas `routes -> controller -> application service -> domain policies -> Prisma repository`. Serviços aplicam autorização, validação de estados e transações; controllers apenas HTTP; não usar Prisma diretamente em rotas. Usar validação de entrada por schema (ex.: Zod/Joi), logs estruturados, tratamento central de erros, rate limiting e versionamento `/api/v1`.
 

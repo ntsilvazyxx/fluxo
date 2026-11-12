@@ -48,6 +48,13 @@ const taskInclude = {
   team: { select: { id: true, name: true } },
   currentCycle: { include: { assignments: { where: { endedAt: null }, include: { user: { select: { id: true, name: true } }, ...assignmentInclude } } } },
 };
+const reportInclude = {
+  team: { select: { id: true, name: true } },
+  currentCycle: { select: {
+    title: true, status: true, priority: true, openedAt: true, closedAt: true, deadlineAt: true,
+    assignments: { where: { endedAt: null }, select: { user: { select: { id: true, name: true } } } },
+  } },
+};
 
 export const createDashboardService = ({ prisma }) => ({
   async summary(actor, filters) {
@@ -61,6 +68,10 @@ export const createDashboardService = ({ prisma }) => ({
     // Historical responsibility includes ended assignments of that cycle.
     if (filters.responsibleId) historicalFilter.assignments = { some: { userId: filters.responsibleId } };
     const scopedCycleWhere = { ...historicalFilter, task: { deletedAt: null, parentCycleId: null, ...scopedTasks(actor), ...(filters.teamId ? { teamId: filters.teamId } : {}) } };
+    if (filters.periodStart || filters.periodEnd) {
+      const period = { ...(filters.periodStart ? { gte: filters.periodStart } : {}), ...(filters.periodEnd ? { lte: filters.periodEnd } : {}) };
+      scopedCycleWhere.OR = [{ openedAt: period }, { status: { in: TERMINAL }, closedAt: period }];
+    }
     const historicCycles = await prisma.taskCycle.findMany({
       where: scopedCycleWhere,
       select: { id: true, taskId: true, status: true, deadlineAt: true, openedAt: true, closedAt: true },
@@ -127,7 +138,7 @@ export const createDashboardService = ({ prisma }) => ({
     const orderBy = filters.sortBy === 'publicNumber' ? { publicNumber: filters.sortDirection } : { currentCycle: { [filters.sortBy]: filters.sortDirection } };
     const [total, tasks] = await Promise.all([
       prisma.task.count({ where }),
-      prisma.task.findMany({ where, include: taskInclude, orderBy, skip, take: filters.pageSize }),
+      prisma.task.findMany({ where, include: reportInclude, orderBy, skip, take: filters.pageSize }),
     ]);
     return {
       rows: tasks.map((task) => {

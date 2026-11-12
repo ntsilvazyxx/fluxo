@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { env } from '../../config/env.js';
+import { unseal } from '../../shared/security/auth-secrets.js';
 
 const NOTIFICATION_EVENTS = new Set([
   'TASK_ASSIGNED',
@@ -23,7 +25,7 @@ const NOTIFICATION_EVENTS = new Set([
   'TASK_OVERDUE',
 ]);
 
-export const createOutboxService = ({ emailSender }) => {
+export const createOutboxService = ({ emailSender, config = env }) => {
   const recipientsForEvent = async (tx, eventType, payload) => {
     const recipients = new Set();
 
@@ -152,6 +154,21 @@ export const createOutboxService = ({ emailSender }) => {
   const processEvent = async (tx, event) => {
     const { eventType, payloadJson } = event;
     const payload = payloadJson ?? {};
+    if (eventType === 'PASSWORD_RESET_REQUESTED') {
+      const reset = await tx.passwordResetToken.findUnique({ where: { id: payload.resetId }, include: { user: true } });
+      if (!reset || reset.usedAt || reset.expiresAt <= new Date() || !reset.user.isActive || reset.user.deletedAt) return { processed: true, skipped: true };
+      // Disabled SMTP never consumes a reset as successfully delivered.
+      if (emailSender.testMode) throw new Error('Entrega de recuperação indisponível.');
+      const token = unseal(payload.tokenCiphertext, reset.id, config);
+      if (createHash('sha256').update(token).digest('hex') !== reset.tokenHash) throw new Error('Mensagem de recuperação inválida.');
+      const recipient = reset.user.emailNormalized;
+      const delivery = await tx.emailDelivery.upsert({ where: { outboxEventId_recipient: { outboxEventId: event.id, recipient } }, update: {}, create: { id: randomUUID(), outboxEventId: event.id, recipient, status: 'PENDING' } });
+      if (delivery.status === 'SENT') return { processed: true };
+      const result = await emailSender.send({ to: recipient, subject: 'SEAF — Recuperação de acesso', body: `Para redefinir sua senha, acesse ${config.appBaseUrl}/recuperar-senha#token=${encodeURIComponent(token)} . O link é temporário e de uso único. Se não solicitou, ignore esta mensagem.` });
+      await tx.emailDelivery.update({ where: { id: delivery.id }, data: { status: result.status, attemptCount: { increment: 1 }, lastError: result.lastError, sentAt: result.sentAt } });
+      if (result.status !== 'SENT') throw new Error('Falha na entrega de recuperação.');
+      return { processed: true };
+    }
     const appBaseUrl = process.env.APP_BASE_URL ?? 'http://localhost:5173';
 
     if (!NOTIFICATION_EVENTS.has(eventType)) return { processed: true, skipped: true };

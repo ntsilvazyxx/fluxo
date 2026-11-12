@@ -1,5 +1,7 @@
 # SDD 07 — Segurança e autorização
 
+> Proposta de mudança de requisito (2026-11-12): o responsável solicitou autenticação somente por e-mail e senha para todos os perfis, inclusive ADMIN MASTER, retirando MFA do login e das ações críticas na política técnica implementada. A exigência anterior abaixo é preservada como referência, não como requisito cumprido. Exceção de segurança pendente de aprovação formal institucional. Risco residual: ausência de autenticação multifator em contas administrativas críticas. Argon2id, rate limiting, JWT curto, refresh rotativo, cookies, revogação, auditoria, RBAC e isolamento permanecem; não equivalem a MFA. Produção: NÃO APTO enquanto requisitos institucionais ou controles críticos não forem homologados. Ver `docs/AUTHENTICATION-SECURITY.md`.
+
 ## Autenticação
 Sessões individuais; senha com Argon2id ou bcrypt com custo adequado; JWT de acesso curto e refresh token rotativo armazenado apenas em hash no banco, preferencialmente cookie HttpOnly Secure SameSite conforme topologia. Revogação de sessões, limite de tentativas, recuperação segura de senha. MFA obrigatório para ações críticas do ADMIN MASTER. TLS em produção; segredos em ambiente/cofre, nunca no repositório.
 
