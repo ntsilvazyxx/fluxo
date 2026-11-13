@@ -6,10 +6,14 @@ Base técnica do sistema institucional para gestão de tarefas administrativas d
 
 ## Stack
 
-- Frontend: React + Vite, JavaScript/JSX e Tailwind CSS, com abordagem mobile-first.
-- Backend: Node.js + Express, JavaScript ESM e arquitetura de monólito modular.
+- Frontend: React + Vite, TypeScript/TSX e Tailwind CSS, com abordagem mobile-first.
+- Backend: Node.js + Express, JavaScript ESM e arquitetura de monólito modular (permanece em JavaScript).
 - Persistência em MariaDB 10.11 + Prisma ORM.
 - Workspaces npm para executar e validar as duas aplicações pela raiz.
+
+## TypeScript no frontend
+
+O frontend utiliza TypeScript/TSX. O `tsconfig.json` mantém `strict: false` temporariamente, mas a verificação semântica é real: `noCheck` não é usado. Execute `npm run typecheck --workspace frontend`. Os contratos JSON existentes da API foram preservados.
 
 ## Pré-requisitos
 

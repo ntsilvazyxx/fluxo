@@ -1,7 +1,7 @@
 import { Bell, ArrowRight, Loader2, Check, Mail } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../auth/AuthContext.jsx';
+import { useAuth } from '../auth/AuthContext.tsx';
 
 const PAGE_SIZE = 20;
 

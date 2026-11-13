@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../auth/AuthContext.jsx';
+import { useAuth } from '../auth/AuthContext.tsx';
 export function LoginPage() {
   const { login } = useAuth();
   const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
   const submit = async (event) => {
     event.preventDefault(); setBusy(true); setError(''); const form = new FormData(event.currentTarget);
     try {
-      await login(form.get('email'), form.get('password'));
+      await login(String(form.get('email') ?? ''), String(form.get('password') ?? ''));
     } catch (cause) { setError(cause.message); } finally { setBusy(false); }
   };
   return <main className="grid min-h-screen bg-background lg:grid-cols-2">

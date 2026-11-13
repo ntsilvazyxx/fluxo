@@ -1,8 +1,8 @@
-import { periodQuery } from '../tasks/period-query.js';
+import { periodQuery } from '../tasks/period-query.ts';
 import { AlertTriangle, CheckCircle2, Clock3, ListTodo } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Cell, Bar, BarChart, CartesianGrid, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { useAuth } from '../auth/AuthContext.jsx';
+import { useAuth } from '../auth/AuthContext.tsx';
 
 const labels = { PENDING: 'Pendente', AWAITING_ACCEPTANCE: 'Aguardando aceite', IN_PROGRESS: 'Em andamento', LOW: 'Baixa', NORMAL: 'Normal', HIGH: 'Alta', URGENT: 'Urgente' };
 const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false;

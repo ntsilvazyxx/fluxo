@@ -1,7 +1,7 @@
 import { Eye, ImagePlus, LoaderCircle, Trash2, Upload, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { useAuth } from '../auth/AuthContext.jsx';
+import { useAuth } from '../auth/AuthContext.tsx';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const allowed = ['.jpg', '.jpeg', '.png', '.webp'];
@@ -19,13 +19,13 @@ export function ImageGalleryPanel({ taskId, cycleVersion }) {
   const [expanded, setExpanded] = useState(null);
   const [removing, setRemoving] = useState(null);
   const [reason, setReason] = useState('');
-  const objectUrls = useRef(new Set());
-  const dialogRef = useRef(null);
+  const objectUrls = useRef<Set<string>>(new Set());
+  const dialogRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!expanded && !removing) return;
     const previous = document.activeElement;
     const dialog = dialogRef.current;
-    const focusable = () => [...dialog.querySelectorAll('button:not(:disabled), textarea, [tabindex="0"]')];
+    const focusable = (): HTMLElement[] => Array.from(dialog.querySelectorAll<HTMLElement>('button:not(:disabled), textarea, [tabindex="0"]'));
     focusable()[0]?.focus();
     const onKey = (event) => {
       if (event.key === 'Escape') { setExpanded(null); setRemoving(null); }
@@ -35,14 +35,14 @@ export function ImageGalleryPanel({ taskId, cycleVersion }) {
       else if (!event.shiftKey && document.activeElement === items.at(-1)) { event.preventDefault(); items[0]?.focus(); }
     };
     dialog.addEventListener('keydown', onKey);
-    return () => { dialog.removeEventListener('keydown', onKey); previous?.focus(); };
+    return () => { dialog.removeEventListener('keydown', onKey); if (previous instanceof HTMLElement) previous.focus(); };
   }, [expanded, removing]);
 
   const load = useCallback(async () => {
     const previousUrls = [...objectUrls.current];
     const response = await request(`/tasks/${taskId}/images`);
     const json = await response.json();
-    if (!response.ok) throw new Error(json.error?.message ?? 'Não foi possível carregar as imagens.');
+    if (!response.ok) throw new Error(messageFrom(json, 'Não foi possível carregar as imagens.'));
     const loaded = await Promise.all(json.data.images.map(async (image) => {
       const content = await request(`/images/${image.id}/content`);
       if (!content.ok) return image;
@@ -106,7 +106,7 @@ export function ImageGalleryPanel({ taskId, cycleVersion }) {
           onProgress: (value) => setProgress((current) => ({ ...current, [selected.file.name]: value })),
         });
         const json = await response.json();
-        if (!response.ok) throw new Error(json.error?.message ?? 'Não foi possível enviar a imagem.');
+        if (!response.ok) throw new Error(messageFrom(json, 'Não foi possível enviar a imagem.'));
       }
       files.forEach((file) => URL.revokeObjectURL(file.preview));
       setFiles([]);
@@ -130,7 +130,7 @@ export function ImageGalleryPanel({ taskId, cycleVersion }) {
         body: JSON.stringify({ expectedVersion: cycleVersion, reason }),
       });
       const json = await response.json();
-      if (!response.ok) throw new Error(json.error?.message ?? 'Não foi possível remover a imagem.');
+      if (!response.ok) throw new Error(messageFrom(json, 'Não foi possível remover a imagem.'));
       setRemoving(null);
       setReason('');
       setMessage('Imagem removida do ciclo. O histórico foi preservado.');
@@ -168,6 +168,8 @@ export function ImageGalleryPanel({ taskId, cycleVersion }) {
 
     {expanded && <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Visualização ampliada" className="fixed inset-0 z-50 grid place-items-center bg-slate-950/85 p-4" onClick={() => setExpanded(null)}><button type="button" className="absolute right-4 top-4 grid size-11 place-items-center rounded-full bg-white text-brand-900" onClick={() => setExpanded(null)}><X /><span className="sr-only">Fechar</span></button><img src={expanded.url} alt={`Imagem enviada por ${expanded.uploadedBy.name}`} className="max-h-[85vh] max-w-full rounded-xl object-contain" onClick={(event) => event.stopPropagation()} /></div>}
 
-    {removing && <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="remove-image-title" className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 p-4"><div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"><h3 id="remove-image-title" className="text-lg font-extrabold">Remover esta imagem?</h3><p className="mt-2 text-sm text-muted">Ela deixará de aparecer na galeria, mas o arquivo e a auditoria serão preservados.</p><textarea className="field mt-4" value={reason} onChange={(event) => setReason(event.target.value)} minLength="5" placeholder="Justificativa obrigatória" aria-label="Justificativa da remoção" /><div className="mt-4 flex flex-wrap justify-end gap-2"><button type="button" className="action-secondary" onClick={() => { setRemoving(null); setReason(''); }}>Cancelar</button><button type="button" className="action-danger" disabled={busy || reason.trim().length < 5} onClick={confirmRemoval}><Trash2 size={18} />Confirmar remoção</button></div></div></div>}
+    {removing && <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="remove-image-title" className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 p-4"><div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"><h3 id="remove-image-title" className="text-lg font-extrabold">Remover esta imagem?</h3><p className="mt-2 text-sm text-muted">Ela deixará de aparecer na galeria, mas o arquivo e a auditoria serão preservados.</p><textarea className="field mt-4" value={reason} onChange={(event) => setReason(event.target.value)} minLength={5} placeholder="Justificativa obrigatória" aria-label="Justificativa da remoção" /><div className="mt-4 flex flex-wrap justify-end gap-2"><button type="button" className="action-secondary" onClick={() => { setRemoving(null); setReason(''); }}>Cancelar</button><button type="button" className="action-danger" disabled={busy || reason.trim().length < 5} onClick={confirmRemoval}><Trash2 size={18} />Confirmar remoção</button></div></div></div>}
   </section>;
 }
+
+function messageFrom(value: unknown, fallback: string) { if (!value || typeof value !== 'object') return fallback; const error = (value as { error?: { message?: unknown } }).error; return typeof error?.message === 'string' ? error.message : fallback; }

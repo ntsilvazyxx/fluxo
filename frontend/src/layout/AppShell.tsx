@@ -1,7 +1,7 @@
 import { Archive, BarChart3, Bell, CalendarDays, Columns3, FileText, Home, LogOut, Menu, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink, Link, Outlet, useLocation } from 'react-router-dom';
-import { useAuth } from '../auth/AuthContext.jsx';
+import { useAuth } from '../auth/AuthContext.tsx';
 
 export function AppShell() {
   const { user, logout } = useAuth();

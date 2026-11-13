@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { periodQuery } from './period-query.js';
+import { periodQuery } from './period-query.ts';
 describe('filtro de período do formulário', () => {
   it('inclui o fim do dia local selecionado e mantém instantes explícitos da API', () => {
     const query = periodQuery({ periodStart: '2026-11-12', periodEnd: '2026-11-12', priority: 'HIGH', search: '' });

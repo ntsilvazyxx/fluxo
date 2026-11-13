@@ -1,10 +1,10 @@
 import { ChevronLeft, ChevronRight, Filter, Plus, Search, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../auth/AuthContext.jsx';
-import { EmptyTasks, TaskCard } from '../tasks/task-ui.jsx';
-import { useTasks } from '../tasks/useTasks.js';
-import { kanbanFilterKeys, operationalColumns, personalColumns, taskQuery } from '../tasks/kanban.js';
+import { useAuth } from '../auth/AuthContext.tsx';
+import { EmptyTasks, TaskCard } from '../tasks/task-ui.tsx';
+import { useTasks } from '../tasks/useTasks.ts';
+import { kanbanFilterKeys, operationalColumns, personalColumns, taskQuery } from '../tasks/kanban.ts';
 
 export function KanbanPage() {
   const { request, user } = useAuth();
@@ -41,7 +41,7 @@ export function KanbanPage() {
     const { name, value } = event.target;
     setParams((current) => {
       const next = new URLSearchParams(current);
-      if (value) next.set(name, value); else next.delete(name);
+      if (value) next.set(name, String(value)); else next.delete(name);
       next.delete('personalPage'); next.delete('teamPage');
       return next;
     }, { replace: true });
@@ -77,7 +77,7 @@ export function KanbanPage() {
       </div>}
     </section>
 
-    <div ref={boardRef} role="region" aria-label="Colunas do Kanban" tabIndex="0" className="kanban-board mt-5 rounded-xl pb-3 focus-visible:outline-2 focus-visible:outline-brand-700" onScroll={(event) => { try { sessionStorage.setItem(scrollKey, String(event.currentTarget.scrollLeft)); } catch { /* Optional UI persistence. */ } }}>
+    <div ref={boardRef} role="region" aria-label="Colunas do Kanban" tabIndex={0} className="kanban-board mt-5 rounded-xl pb-3 focus-visible:outline-2 focus-visible:outline-brand-700" onScroll={(event) => { try { sessionStorage.setItem(scrollKey, String(event.currentTarget.scrollLeft)); } catch { /* Optional UI persistence. */ } }}>
       {columns.map(([status, label]) => {
         const mine = status === 'MINE' || !managerial;
         const source = mine ? personal : operational;

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { KanbanPage } from './KanbanPage.jsx';
+import { KanbanPage } from './KanbanPage.tsx';
 const auth = vi.hoisted(() => ({ request: vi.fn(), user: null }));
 vi.mock('../auth/AuthContext.jsx', () => ({ useAuth: () => auth }));
 const task = (id, title, status = 'AWAITING_ACCEPTANCE') => ({ id, publicNumber: id, team: { name: 'Equipe autorizada' }, cycle: { title, status, priority: 'NORMAL', deadlineAt: '2027-01-04T12:00:00Z', assignment: { userId: 'self', user: { name: 'Responsável de teste' } } } });
@@ -30,7 +30,7 @@ describe('Kanban unificado', () => {
     auth.user.role.code = role; open();
     await screen.findByRole('heading', { name: 'Entrega concluída' });
     expect(screen.getAllByRole('heading', { level: 2 }).map((node) => node.textContent)).toEqual(['Aguardando aceite', 'Em andamento', 'Concluídas']);
-    fireEvent.click(screen.getByRole('button', { name: 'Filtros', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Filtros' }));
     expect(screen.queryByRole('combobox', { name: 'Equipe' })).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Responsável' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Nova tarefa' })).not.toBeInTheDocument();
@@ -39,7 +39,7 @@ describe('Kanban unificado', () => {
   it('filtros avançados são recolhidos, controlados e limpos nas duas consultas', async () => {
     open(); await screen.findByRole('heading', { name: 'Entrega da equipe' });
     expect(screen.queryByRole('combobox', { name: 'Prioridade' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Filtros', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Filtros' }));
     await screen.findByRole('option', { name: 'Equipe autorizada' });
     fireEvent.change(screen.getByRole('combobox', { name: 'Equipe' }), { target: { value: 'team' } });
     fireEvent.change(screen.getByRole('combobox', { name: 'Prioridade' }), { target: { value: 'HIGH' } });

@@ -1,7 +1,7 @@
 import { AlertTriangle, CornerDownRight, History, Plus, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { PriorityBadge, StatusBadge } from './task-ui.jsx';
+import { PriorityBadge, StatusBadge } from './task-ui.tsx';
 
 const activeStatuses = ['PENDING', 'AWAITING_ACCEPTANCE', 'IN_PROGRESS'];
 
@@ -33,12 +33,12 @@ function SubtaskCard({ subtask }) {
 }
 
 function SubtaskForm({ users, version, busy, onSubmit }) {
-  return <form className="mt-5 grid gap-3 rounded-xl bg-background p-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); onSubmit({ ...data, expectedVersion: version, deadlineAt: new Date(data.deadlineAt).toISOString() }); }}>
-    <label className="text-sm font-bold sm:col-span-2">Título<input aria-label="Título" name="title" minLength="3" required className="field mt-1" /></label><label className="text-sm font-bold sm:col-span-2">Descrição<textarea aria-label="Descrição" name="description" minLength="3" required className="field mt-1" /></label><label className="text-sm font-bold">Prioridade<select aria-label="Prioridade" name="priority" defaultValue="NORMAL" className="field mt-1"><option value="LOW">Baixa</option><option value="NORMAL">Normal</option><option value="HIGH">Alta</option><option value="URGENT">Urgente</option></select></label><label className="text-sm font-bold">Responsável<select aria-label="Responsável" name="userId" required className="field mt-1"><option value="">Selecione</option>{users.filter((item) => item.isActive).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="text-sm font-bold">Prazo<input aria-label="Prazo" name="deadlineAt" type="datetime-local" required className="field mt-1" /></label><label className="text-sm font-bold">Justificativa opcional<textarea aria-label="Justificativa" name="reason" minLength="5" className="field mt-1" /></label><button disabled={busy} className="action-primary sm:col-span-2"><Plus size={18} />Criar e atribuir subtarefa</button>
+  return <form className="mt-5 grid gap-3 rounded-xl bg-background p-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); onSubmit({ ...data, expectedVersion: version, deadlineAt: new Date(String(data.deadlineAt)).toISOString() }); }}>
+    <label className="text-sm font-bold sm:col-span-2">Título<input aria-label="Título" name="title" minLength={3} required className="field mt-1" /></label><label className="text-sm font-bold sm:col-span-2">Descrição<textarea aria-label="Descrição" name="description" minLength={3} required className="field mt-1" /></label><label className="text-sm font-bold">Prioridade<select aria-label="Prioridade" name="priority" defaultValue="NORMAL" className="field mt-1"><option value="LOW">Baixa</option><option value="NORMAL">Normal</option><option value="HIGH">Alta</option><option value="URGENT">Urgente</option></select></label><label className="text-sm font-bold">Responsável<select aria-label="Responsável" name="userId" required className="field mt-1"><option value="">Selecione</option>{users.filter((item) => item.isActive).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="text-sm font-bold">Prazo<input aria-label="Prazo" name="deadlineAt" type="datetime-local" required className="field mt-1" /></label><label className="text-sm font-bold">Justificativa opcional<textarea aria-label="Justificativa" name="reason" minLength={5} className="field mt-1" /></label><button disabled={busy} className="action-primary sm:col-span-2"><Plus size={18} />Criar e atribuir subtarefa</button>
   </form>;
 }
 
 function RestartForm({ busy, label, onSubmit }) {
   const [reason, setReason] = useState('');
-  return <form className="mt-4 space-y-3" onSubmit={(event) => { event.preventDefault(); onSubmit(reason); }}><textarea className="field" minLength="5" required value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Justificativa obrigatória" /><button disabled={busy} className="action-primary"><RotateCcw size={18} />{label}</button></form>;
+  return <form className="mt-4 space-y-3" onSubmit={(event) => { event.preventDefault(); onSubmit(reason); }}><textarea className="field" minLength={5} required value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Justificativa obrigatória" /><button disabled={busy} className="action-primary"><RotateCcw size={18} />{label}</button></form>;
 }

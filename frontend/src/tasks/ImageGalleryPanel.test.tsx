@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const auth = vi.hoisted(() => ({ request: vi.fn(), upload: vi.fn() }));
 vi.mock('../auth/AuthContext.jsx', () => ({ useAuth: () => auth }));
 
-import { ImageGalleryPanel } from './ImageGalleryPanel.jsx';
+import { ImageGalleryPanel } from './ImageGalleryPanel.tsx';
 
 describe('galeria de imagens', () => {
   afterEach(cleanup);

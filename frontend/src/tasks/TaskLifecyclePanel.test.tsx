@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-import { TaskLifecyclePanel } from './TaskLifecyclePanel.jsx';
+import { TaskLifecyclePanel } from './TaskLifecyclePanel.tsx';
 
 const activeTask = {
   id: 'parent', parentCycleId: null,

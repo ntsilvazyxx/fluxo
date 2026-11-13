@@ -23,7 +23,7 @@ export function PasswordRecoveryPage() {
     } catch { setMessage('Não foi possível acessar o serviço. Tente novamente.'); } finally { setBusy(false); }
   };
   return <main className="mx-auto max-w-lg p-6"><h1 className="text-2xl font-extrabold">{token ? 'Redefinir senha' : 'Recuperar acesso'}</h1><form className="mt-6 space-y-4" onSubmit={submit}>
-    {token ? <label className="block font-bold">Nova senha<input className="field mt-2" name="password" type="password" autoComplete="new-password" minLength="12" maxLength="128" required /><span className="text-sm font-normal">Use pelo menos 12 caracteres, maiúscula, minúscula e número.</span></label> : <label className="block font-bold">E-mail<input className="field mt-2" name="email" type="email" autoComplete="username" required /></label>}
+    {token ? <label className="block font-bold">Nova senha<input className="field mt-2" name="password" type="password" autoComplete="new-password" minLength={12} maxLength={128} required /><span className="text-sm font-normal">Use pelo menos 12 caracteres, maiúscula, minúscula e número.</span></label> : <label className="block font-bold">E-mail<input className="field mt-2" name="email" type="email" autoComplete="username" required /></label>}
     <button className="action-primary" disabled={busy}>{busy ? 'Aguarde…' : token ? 'Salvar nova senha' : 'Solicitar recuperação'}</button>{message && <p role="status" className="rounded-xl bg-brand-100 p-3">{message}</p>}
   </form><Link to="/login" className="mt-6 inline-block font-bold text-brand-700">Voltar ao login</Link></main>;
 }

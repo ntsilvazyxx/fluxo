@@ -1,5 +1,10 @@
 # Decisões de implementação
 
+## 2026-11-13 — Consolidação do Kanban com TypeScript
+
+A base oficial de continuidade é `feature/kanban-refactor` (`5fa1487`), que contém as Fases 0 a 9 e a reformulação mais recente do Kanban. O frontend foi convertido nesta base de `.js/.jsx` para `.ts/.tsx`, sem substituir a lógica do quadro ou os contratos HTTP existentes. Vite, Vitest e ESLint foram configurados para TypeScript; `tsc --noEmit` integra build e o script `typecheck`. A checagem é efetiva, sem `noCheck`, enquanto `strict: false` permanece temporariamente para evolução incremental. O backend continua em JavaScript ESM.
+
+
 ## 2026-11-12 — Reformulação do Kanban autorizada após a Fase 9
 
 - A tela Kanban centraliza acompanhamento/execução. Secretário e Gestor usam quatro colunas: Minhas tarefas, Pendente, Aguardando aceite, Em andamento. Técnico e ADMIN MASTER usam somente quadro pessoal com Aguardando aceite, Em andamento e Concluídas. A coluna pessoal reutiliza `GET /my-tasks`; não é novo status nem duplica registros. As colunas gerenciais continuam usando `GET /kanban` apenas para Secretário/Gestor na interface.

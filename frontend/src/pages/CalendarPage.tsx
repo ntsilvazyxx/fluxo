@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { CalendarDays, Check, Plus, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '../auth/AuthContext.jsx';
+import { useAuth } from '../auth/AuthContext.tsx';
 
 const weekdays = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
 const idempotencyKey = () => crypto.randomUUID();
