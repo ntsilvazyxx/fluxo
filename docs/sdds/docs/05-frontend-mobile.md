@@ -6,9 +6,9 @@ React.js com JSX, Vite, React Router, Tailwind CSS, biblioteca de componentes ac
 ## Rotas/telas
 - `/login`: autenticação, recuperação de acesso conforme política.
 - `/dashboard`: indicadores por escopo (não disponível a técnico sem autorização).
-- `/kanban`: Secretário global, Gestor equipes geridas; 3 colunas operacionais.
-- `/minhas-tarefas`: todos os perfis executores, especialmente Técnico.
-- `/tarefas/:id`: detalhe, histórico, atribuição, subtarefas, solicitações, evidências, ações permitidas.
+- `/kanban`: Secretário/Gestor: Minhas tarefas + Pendente + Aguardando aceite + Em andamento; Técnico/ADMIN MASTER: quadro pessoal Aguardando aceite + Em andamento + Concluídas. Nenhum acesso gerencial adicional para esses dois últimos perfis; serviços pessoais mantêm autorização backend.
+- `/minhas-tarefas`: somente redirecionamento compatível para `/kanban`, preservando parâmetros; sem item independente no menu.
+- `/kanban/tarefas/:id`: componentes existentes de detalhe, histórico, atribuição, subtarefas, solicitações, evidências e ações permitidas. `/tarefas/:id` redireciona para esta rota; notificações abrem diretamente a rota integrada. Filtros e paginação da consulta são preservados ao voltar ao quadro.
 - `/tarefas/nova`: Secretário/Gestor.
 - `/historico`: concluídas/canceladas com filtros.
 - `/equipes`, `/usuarios`: administração conforme perfil.
@@ -25,6 +25,8 @@ React.js com JSX, Vite, React Router, Tailwind CSS, biblioteca de componentes ac
 - Rede lenta: skeleton, estados vazios/erro, feedback de carregamento, impedir duplo clique; cache invalidado após mutações; 409 exige recarga/reconciliação sem sobrescrever dados.
 
 ## Componentes
+
+Reformulação UI autorizada: cartões compactos verticais em colunas lado a lado, rolagem horizontal interna no mobile/tablet, barra de busca e botão Filtros com contagem/limpeza. Filtros avançados só aparecem por ação do usuário; equipe/responsável apenas para perfis gerenciais e com opções escopadas pelo backend. Menu do cartão abre detalhes/histórico e execução pessoal no componente existente, sem duplicar transições. Paginação pessoal e gerencial independente; contagens indicam a página atual. Contexto do quadro usa URL e offset horizontal em sessionStorage, sem guardar tokens.
 `AppShell`, `RoleGuard` (somente UX, não segurança), `TaskCard`, `TaskStatusBadge`, `PriorityBadge`, `DeadlineIndicator`, `KanbanBoard`, `TaskTimeline`, `AssignmentPanel`, `RequestDecisionPanel`, `SubtaskList`, `TaskForm`, `ImageUploader`, `FilterBar`, `NotificationCenter`, `ConfirmActionDialog`, `ConflictAlert`, `ResponsiveDataList`.
 
 ## Comportamento dos cartões

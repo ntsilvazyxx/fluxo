@@ -1,11 +1,10 @@
 import { lazy, Suspense } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthContext.jsx';
 import { AppShell } from './layout/AppShell.jsx';
 const CalendarPage = lazy(() => import('./pages/CalendarPage.jsx').then((module) => ({ default: module.CalendarPage })));
 const KanbanPage = lazy(() => import('./pages/KanbanPage.jsx').then((module) => ({ default: module.KanbanPage })));
 import { LoginPage } from './pages/LoginPage.jsx';
-const MyTasksPage = lazy(() => import('./pages/MyTasksPage.jsx').then((module) => ({ default: module.MyTasksPage })));
 const TaskDetailPage = lazy(() => import('./pages/TaskDetailPage.jsx').then((module) => ({ default: module.TaskDetailPage })));
 const TaskFormPage = lazy(() => import('./pages/TaskFormPage.jsx').then((module) => ({ default: module.TaskFormPage })));
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage.jsx').then((module) => ({ default: module.NotificationsPage })));
@@ -25,7 +24,16 @@ function Protected({ children }) {
 
 function Roles({ allowed, children }) {
   const { user } = useAuth();
-  return allowed.includes(user.role.code) ? children : <Navigate to="/minhas-tarefas" replace />;
+  return allowed.includes(user.role.code) ? children : <Navigate to="/kanban" replace />;
+}
+
+function LegacyTask() {
+  const { id } = useParams(); const location = useLocation();
+  return <Navigate to={`/kanban/tarefas/${id}${location.search}${location.hash}`} replace />;
+}
+function LegacyMyTasks() {
+  const location = useLocation();
+  return <Navigate to={`/kanban${location.search}${location.hash}`} replace />;
 }
 
 const managers = ['ADMIN_MASTER', 'SECRETARY', 'MANAGER'];
@@ -41,11 +49,12 @@ function AppRoutes() {
       <Route index element={<Roles allowed={analysts}><LoadingPage><DashboardPage /></LoadingPage></Roles>} />
       <Route path="dashboard" element={<Roles allowed={analysts}><LoadingPage><DashboardPage /></LoadingPage></Roles>} />
       <Route path="relatorios" element={<Roles allowed={analysts}><LoadingPage><ReportsPage /></LoadingPage></Roles>} />
-      <Route path="kanban" element={<Roles allowed={managers}><KanbanPage /></Roles>} />
-      <Route path="minhas-tarefas" element={<MyTasksPage />} />
+      <Route path="kanban" element={<KanbanPage />} />
+      <Route path="kanban/tarefas/:id" element={<TaskDetailPage />} />
+      <Route path="minhas-tarefas" element={<LegacyMyTasks />} />
       <Route path="historico" element={<TaskHistoryPage />} />
       <Route path="tarefas/nova" element={<Roles allowed={managers}><TaskFormPage /></Roles>} />
-      <Route path="tarefas/:id" element={<TaskDetailPage />} />
+      <Route path="tarefas/:id" element={<LegacyTask />} />
       <Route path="usuarios" element={<Roles allowed={['ADMIN_MASTER', 'SECRETARY']}><UsersPage /></Roles>} />
       <Route path="equipes" element={<TeamsPage />} />
       <Route path="calendarios" element={<Roles allowed={managers}><CalendarPage /></Roles>} />

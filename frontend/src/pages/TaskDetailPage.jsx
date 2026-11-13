@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { ArrowLeft, CalendarClock, Check, Pencil, RotateCcw, Timer, UserRound, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { TaskLifecyclePanel } from '../tasks/TaskLifecyclePanel.jsx';
 import { ImageGalleryPanel } from '../tasks/ImageGalleryPanel.jsx';
@@ -16,6 +16,8 @@ const duration = (value) => {
 export function TaskDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const boardUrl = `/kanban${location.search}`;
   const { request, user } = useAuth();
   const [task, setTask] = useState(null);
   const [users, setUsers] = useState([]);
@@ -41,7 +43,7 @@ export function TaskDetailPage() {
       const response = await request(path, { method, headers: { 'idempotency-key': key() }, body: JSON.stringify(body) });
       const json = await response.json();
       if (!response.ok) throw new Error(json.error?.message ?? 'Não foi possível concluir a operação.');
-      if (path.endsWith('/reject')) { navigate('/minhas-tarefas'); return true; }
+      if (path.endsWith('/reject')) { navigate(boardUrl); return true; }
       await load();
       return true;
     } catch (cause) {
@@ -61,7 +63,7 @@ export function TaskDetailPage() {
   const openSubtasks = (task.subtasks ?? []).filter((item) => item.parentCycleId === currentCycle.id && ['PENDING', 'AWAITING_ACCEPTANCE', 'IN_PROGRESS'].includes(item.cycle.status));
 
   return <div className="max-w-5xl">
-    <Link to="/minhas-tarefas" className="inline-flex min-h-11 items-center gap-2 text-sm font-bold text-brand-700"><ArrowLeft size={17} />Voltar</Link>
+    <Link to={boardUrl} className="inline-flex min-h-11 items-center gap-2 text-sm font-bold text-brand-700"><ArrowLeft size={17} />Voltar ao Kanban</Link>
     <section className="mt-4 rounded-2xl border border-border bg-white p-5 shadow-card sm:p-7">
       <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-sm font-bold text-brand-700">Tarefa #{task.publicNumber} · Ciclo {currentCycle.cycleNumber}</p><h1 className="mt-2 text-3xl font-extrabold">{currentCycle.title}</h1><p className="mt-3 max-w-3xl whitespace-pre-wrap text-muted">{currentCycle.description}</p></div><div className="flex gap-2"><StatusBadge status={currentCycle.status} /><PriorityBadge priority={currentCycle.priority} /></div></div>
       <dl className="mt-6 grid gap-4 border-t border-border pt-5 text-sm sm:grid-cols-3"><Info icon={UserRound} label="Responsável" value={currentAssignment?.user?.name ?? 'Sem responsável'} /><Info icon={CalendarClock} label="Prazo" value={currentCycle.deadlineAt ? new Date(currentCycle.deadlineAt).toLocaleString('pt-BR') : 'Sem prazo'} /><Info label="Equipe" value={task.team.name} /></dl>

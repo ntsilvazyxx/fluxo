@@ -170,7 +170,7 @@ test('ADMIN MASTER gerencia usuários/equipes via API e consulta telas técnicas
   await api(request, 'admin', `/users/${user.user.id}`, { isActive: false, reason: 'Inativação controlada de homologação' }, 'PATCH');
   await login(page, 'admin'); await page.goto('/usuarios'); await expect(page.getByRole('heading', { name: 'Usuários' })).toBeVisible();
   await page.goto('/equipes'); await expect(page.getByRole('heading', { name: 'Equipes' })).toBeVisible();
-  await page.goto('/dashboard'); await expect(page).toHaveURL(/minhas-tarefas/);
+  await page.goto('/dashboard'); await expect(page).toHaveURL(/kanban/);
 });
 
 test('notificação produzida pela outbox aparece e pode ser marcada como lida', async ({ page, request }) => {
@@ -231,7 +231,7 @@ test('carregamento mantém feedback enquanto a requisição real aguarda a rede'
   await page.route('**/api/v1/my-tasks?*', async (route) => { await gate; await route.continue(); });
   try {
     await page.goto('/minhas-tarefas');
-    await expect(page.locator('main').getByText('Carregando…', { exact: true })).toBeVisible();
+    await expect(page.locator('main').getByRole('status').first()).toBeVisible();
   } finally { release(); }
   await expect(page.locator('main').getByText('Carregando…', { exact: true })).toHaveCount(0);
 });
@@ -261,7 +261,7 @@ for (const width of [320, 768, 1440]) {
     await expect(page.getByRole('heading', { name: 'Concluir tarefa', exact: true })).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
     await page.screenshot({ path: `.artifacts/screenshots/${width}-technician-detail.png`, fullPage: true });
-    await page.goto('/dashboard'); await expect(page).toHaveURL(/minhas-tarefas/);
+    await page.goto('/dashboard'); await expect(page).toHaveURL(/kanban/);
   });
 }
 

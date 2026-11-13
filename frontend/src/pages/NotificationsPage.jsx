@@ -74,7 +74,7 @@ export function NotificationsPage() {
   };
 
   const openTask = (entityId) => {
-    navigate(`/tarefas/${entityId}`);
+    navigate(`/kanban/tarefas/${entityId}`);
   };
 
   const typeLabel = (type) => {

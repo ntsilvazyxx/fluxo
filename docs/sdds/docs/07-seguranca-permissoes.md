@@ -16,7 +16,7 @@ Sessões individuais; senha com Argon2id ou bcrypt com custo adequado; JWT de ac
 | Concluir tarefa | Se atual responsável | Se atual responsável | Se atual responsável | Se atual responsável |
 | Decidir solicitação | Excepcional justificado | Global | Equipes geridas | Não |
 | Kanban gerencial | Auditoria/escopo autorizado | Global | Equipes geridas | Não |
-| Minhas Tarefas | Próprias | Próprias | Próprias | Próprias |
+| Quadro pessoal no Kanban (antiga Minhas Tarefas) | Próprias | Próprias | Próprias | Próprias |
 | Auditoria global | Sim | Conforme política expressa | Não | Não |
 
 ## Autorização obrigatória

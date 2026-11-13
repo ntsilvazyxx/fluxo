@@ -167,20 +167,23 @@ async function restartCycle(prisma, request, id, input, key, action) {
 
 export const createTaskService = ({ prisma }) => ({
   async list(actor, filters, mode = 'all') {
-    const now = new Date(); const where = { deletedAt: null, ...scopeWhere(actor) };
-    if (mode === 'kanban') where.currentCycle = { ...(where.currentCycle ?? {}), status: { in: ACTIVE_STATUSES } };
-    if (mode === 'history') where.currentCycle = { ...(where.currentCycle ?? {}), status: { in: TERMINAL_STATUSES } };
-    if (mode === 'mine') where.currentCycle = { assignments: { some: { userId: actor.userId, OR: [{ endedAt: null }, { endReason: 'COMPLETED' }] } } };
+    const now = new Date();
+    const where = { deletedAt: null, AND: [scopeWhere(actor)] };
+    const responsibility = (userId) => ({ assignments: { some: { userId, OR: [{ endedAt: null }, { endReason: 'COMPLETED' }] } } });
+    // Compose constraints: filters must never replace scope, mode or one another.
+    if (mode === 'kanban') where.AND.push({ currentCycle: { status: { in: ACTIVE_STATUSES } } });
+    if (mode === 'history') where.AND.push({ currentCycle: { status: { in: TERMINAL_STATUSES } } });
+    if (mode === 'mine') where.AND.push({ currentCycle: responsibility(actor.userId) });
     if (filters.teamId) where.teamId = filters.teamId;
-    const cycleFilter = { ...(where.currentCycle ?? {}) };
+    const cycleFilter = {};
     if (filters.priority) cycleFilter.priority = filters.priority;
     if (filters.status) cycleFilter.status = filters.status;
-    if (filters.responsibleId && mode !== 'mine') {
-      if (actor.roleCode === 'TECHNICIAN' && filters.responsibleId !== actor.userId) where.id = '__outside_scope__';
-      else cycleFilter.assignments = { some: { userId: filters.responsibleId } };
+    if (filters.responsibleId) {
+      if ((mode === 'mine' || actor.roleCode === 'TECHNICIAN') && filters.responsibleId !== actor.userId) where.id = '__outside_scope__';
+      else where.AND.push({ currentCycle: responsibility(filters.responsibleId) });
     }
     if (filters.deadlineFrom || filters.deadlineTo) cycleFilter.deadlineAt = { ...(filters.deadlineFrom ? { gte: filters.deadlineFrom } : {}), ...(filters.deadlineTo ? { lte: filters.deadlineTo } : {}) };
-    if (filters.overdue === 'true') { cycleFilter.deadlineAt = { ...(cycleFilter.deadlineAt ?? {}), lt: now }; cycleFilter.status = { in: ACTIVE_STATUSES }; }
+    if (filters.overdue === 'true') where.AND.push({ currentCycle: { deadlineAt: { lt: now }, status: { in: ACTIVE_STATUSES } } });
     if (filters.overdue === 'false') cycleFilter.OR = [{ deadlineAt: null }, { deadlineAt: { gte: now } }, { status: { in: TERMINAL_STATUSES } }];
     if (filters.search) {
       const numeric = /^\d+$/.test(filters.search) ? BigInt(filters.search) : null;
@@ -257,7 +260,7 @@ export const createTaskService = ({ prisma }) => ({
       const created=await tx.taskAssignment.create({data:{id:randomUUID(),cycleId:cycle.id,userId:user.id,assignedById:request.auth.userId,calendarVersionId:calendar.activeVersionId,assignedAt:now}});
       if(!cycle.deadlineAt||cycle.deadlineAt.getTime()!==input.deadlineAt.getTime())await tx.deadlineChange.create({data:{id:randomUUID(),cycleId:cycle.id,oldDeadlineAt:cycle.deadlineAt,newDeadlineAt:input.deadlineAt,reason:input.reason??'Prazo definido na atribuição inicial.',changedById:request.auth.userId}});
       await tx.taskCycle.update({where:{id:cycle.id},data:{status:'AWAITING_ACCEPTANCE',deadlineAt:input.deadlineAt,version:{increment:1}}});
-      await audit(tx,request,{entityType:'TaskAssignment',entityId:created.id,action:assignment?'TASK_REASSIGNED':'TASK_ASSIGNED',afterJson:{taskId:id,cycleId:cycle.id,userId:user.id,deadlineAt:input.deadlineAt},reason:input.reason});await outbox(tx,id,cycle,assignment?'TASK_REASSIGNED':'TASK_ASSIGNED',{userId:user.id});
+      await audit(tx,request,{entityType:'TaskAssignment',entityId:created.id,action:assignment?'TASK_REASSIGNED':'TASK_ASSIGNED',afterJson:{taskId:id,cycleId:cycle.id,userId:user.id,deadlineAt:input.deadlineAt},reason:input.reason});await outbox(tx,id,cycle,assignment?'TASK_REASSIGNED':'TASK_ASSIGNED',{userId:user.id,assignmentId:created.id});
       return presentTask(await tx.task.findUnique({where:{id},include:includeCurrent}));
     }});
   },
@@ -268,7 +271,7 @@ export const createTaskService = ({ prisma }) => ({
       const {task,cycle,assignment}=await lockCurrent(tx,initial.cycle.taskId);requireExpectedVersion(cycle,input.expectedVersion);transitionTo(cycle.status,'accept');
       if(!assignment||assignment.id!==assignmentId||assignment.userId!==request.auth.userId)throw conflict('ASSIGNMENT_NOT_CURRENT','A atribuição não é mais atual ou não pertence a você.');
       const now=new Date();await tx.taskAssignment.update({where:{id:assignment.id},data:{acceptedAt:now}});await tx.taskCycle.update({where:{id:cycle.id},data:{status:'IN_PROGRESS',version:{increment:1}}});
-      await audit(tx,request,{entityType:'TaskAssignment',entityId:assignment.id,action:'ASSIGNMENT_ACCEPTED',afterJson:{acceptedAt:now}});await outbox(tx,task.id,cycle,'ASSIGNMENT_ACCEPTED',{userId:request.auth.userId});return presentTask(await tx.task.findUnique({where:{id:task.id},include:includeCurrent}));
+      await audit(tx,request,{entityType:'TaskAssignment',entityId:assignment.id,action:'ASSIGNMENT_ACCEPTED',afterJson:{acceptedAt:now}});await outbox(tx,task.id,cycle,'ASSIGNMENT_ACCEPTED',{userId:request.auth.userId,assignmentId:assignment.id});return presentTask(await tx.task.findUnique({where:{id:task.id},include:includeCurrent}));
     }});
   },
 
@@ -278,7 +281,7 @@ export const createTaskService = ({ prisma }) => ({
       const {task,cycle,assignment}=await lockCurrent(tx,initial.cycle.taskId);requireExpectedVersion(cycle,input.expectedVersion);transitionTo(cycle.status,'reject');
       if(!assignment||assignment.id!==assignmentId||assignment.userId!==request.auth.userId)throw conflict('ASSIGNMENT_NOT_CURRENT','A atribuição não é mais atual ou não pertence a você.');
       const now=new Date();await tx.taskAssignment.update({where:{id:assignment.id},data:{endedAt:now,endReason:'REJECTED'}});await tx.taskCycle.update({where:{id:cycle.id},data:{status:'PENDING',deadlineAt:null,version:{increment:1}}});
-      await audit(tx,request,{entityType:'TaskAssignment',entityId:assignment.id,action:'ASSIGNMENT_REJECTED',beforeJson:{deadlineAt:cycle.deadlineAt},afterJson:{deadlineAt:null},reason:input.reason});await outbox(tx,task.id,cycle,'ASSIGNMENT_REJECTED',{userId:request.auth.userId});return presentTask(await tx.task.findUnique({where:{id:task.id},include:includeCurrent}));
+      await audit(tx,request,{entityType:'TaskAssignment',entityId:assignment.id,action:'ASSIGNMENT_REJECTED',beforeJson:{deadlineAt:cycle.deadlineAt},afterJson:{deadlineAt:null},reason:input.reason});await outbox(tx,task.id,cycle,'ASSIGNMENT_REJECTED',{userId:request.auth.userId,assignmentId:assignment.id});return presentTask(await tx.task.findUnique({where:{id:task.id},include:includeCurrent}));
     }});
   },
 

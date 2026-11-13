@@ -214,6 +214,10 @@ Por solicitação do responsável, todos os perfis, inclusive ADMIN MASTER, entr
 
 A recuperação de senha por e-mail continua usando outbox, SMTP configurável e `AUTH_DATA_ENCRYPTION_KEY` independente. A migração histórica `20261112233000_auth_mfa_sessions` foi preservada e a compensatória `20261113001000_retire_mfa_preserve_history` arquiva seus dados sem descartá-los. Ambas foram aplicadas somente em `seaf_gestao_test`; desenvolvimento não foi migrado nesta revisão. Consulte o [runbook](docs/DEPLOYMENT-RUNBOOK.md) e a seção 14 de [PHASE-9-VALIDATION.md](docs/PHASE-9-VALIDATION.md).
 
+## Reformulação do Kanban após a Fase 9
+
+O acompanhamento e a execução pessoal agora se concentram em `/kanban`: quatro colunas para Secretário/Gestor e três colunas pessoais para Técnico/ADMIN MASTER. A antiga `/minhas-tarefas` redireciona para o quadro. Detalhes, histórico e ações existentes ficam em `/kanban/tarefas/:id`; links antigos de tarefas continuam compatíveis. Filtros avançados são recolhidos e o quadro mantém rolagem interna em telas estreitas. Não há status novo ou migração. Consulte `docs/KANBAN-VALIDATION.md` para testes, limites e aceite visual pendente.
+
 ## Fase 8 — Dashboard e relatórios gerenciais
 
 O dashboard e o relatório são disponibilizados exclusivamente a Secretários e Gestores, sempre no escopo organizacional autorizado. Técnicos e ADMIN MASTER recebem `403` mesmo em acesso direto à API nesta fase.
