@@ -1,45 +1,27 @@
-import { Archive, BarChart3, Bell, CalendarDays, Columns3, FileText, Home, LogOut, Menu, UsersRound } from 'lucide-react';
-import { useState } from 'react';
-import { NavLink, Link, Outlet, useLocation } from 'react-router-dom';
+import { Archive, Bell, CalendarDays, Check, Columns3, LogOut, Menu, UsersRound, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, NavLink, Outlet } from 'react-router-dom';
+import logo from '../../../docs/sdds/assets/logomarca-seaf-original.png';
 import { useAuth } from '../auth/AuthContext.tsx';
 
 export function AppShell() {
-  const { user, logout } = useAuth();
-  const { pathname } = useLocation();
-  const width = pathname.startsWith('/kanban') ? 'max-w-[1600px]' : 'max-w-7xl';
-  const [open, setOpen] = useState(false);
-  const managerial = ['ADMIN_MASTER', 'SECRETARY', 'MANAGER'].includes(user.role.code);
-  const administer = ['ADMIN_MASTER', 'SECRETARY'].includes(user.role.code);
-  const analytics = ['SECRETARY', 'MANAGER'].includes(user.role.code);
-  const links = [
-    { to: '/', label: 'Início', icon: Home },
-    ...(analytics ? [{ to: '/dashboard', label: 'Dashboard', icon: BarChart3 }, { to: '/relatorios', label: 'Relatórios', icon: FileText }] : []),
-    ...(managerial ? [
-      { to: '/calendarios', label: 'Calendários', icon: CalendarDays },
-    ] : []),
-    { to: '/kanban', label: 'Kanban', icon: Columns3 },
-    { to: '/historico', label: 'Histórico', icon: Archive },
-    { to: '/notificacoes', label: 'Notificações', icon: Bell },
-    ...(administer ? [{ to: '/usuarios', label: 'Usuários', icon: UsersRound }] : []),
-    { to: '/equipes', label: 'Equipes', icon: UsersRound },
-  ];
-
-  return <div className="min-h-screen bg-background text-text">
-    <header className="sticky top-0 z-20 bg-brand-900 text-white">
-      <div className={`mx-auto flex h-16 ${width} items-center gap-3 px-4`}>
-        <button className="min-h-11 min-w-11 p-2 md:hidden" onClick={() => setOpen(!open)} aria-label="Abrir navegação"><Menu /></button>
-        <span className="grid size-9 place-items-center rounded-lg bg-white font-black text-brand-900">SE</span>
-        <div className="min-w-0 flex-1"><p className="font-bold">SEAF</p><p className="truncate text-xs text-white/70">Gestão de Tarefas</p></div>
-        <div className="hidden text-right sm:block"><p className="text-sm font-semibold">{user.name}</p><p className="text-xs text-white/70">{user.role.label}</p></div>
-        <button onClick={logout} className="grid min-h-11 min-w-11 place-items-center" aria-label="Sair"><LogOut size={20} /></button>
-        <Link to="/notificacoes" className="grid min-h-11 min-w-11 place-items-center text-white/90 hover:text-white" aria-label="Notificações"><Bell size={20} /></Link>
-      </div>
-    </header>
-    <div className={`mx-auto flex ${width}`}>
-      <aside className={`${open ? 'block' : 'hidden'} fixed inset-x-0 top-16 z-10 max-h-[calc(100vh-4rem)] overflow-y-auto border-b border-border bg-white p-3 md:static md:block md:min-h-[calc(100vh-4rem)] md:w-60 md:shrink-0 md:border-b-0 md:border-r md:p-5`}>
-        {links.map(({ to, label, icon: Icon }) => <NavLink onClick={() => setOpen(false)} end={to === '/'} className={({ isActive }) => `mb-1 flex min-h-11 items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${isActive ? 'bg-brand-100 text-brand-900' : 'text-muted hover:bg-background'}`} key={to} to={to}><Icon size={19} />{label}</NavLink>)}
-      </aside>
-      <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8"><Outlet /></main>
-    </div>
-  </div>;
+  const { user, logout, request } = useAuth();
+  const [expanded, setExpanded] = useState(true);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [noticeOpen, setNoticeOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [unread, setUnread] = useState(0);
+  const mobilePanel = useRef<HTMLElement | null>(null);
+  const notices = useRef<HTMLDivElement | null>(null);
+  // Calendars remain available only for legacy interpretation; no operational UI is exposed.
+  const canManageCalendars = false;
+  const canUseUsers = ['ADMIN_MASTER', 'SECRETARY'].includes(user.role.code);
+  const links = [{ to: '/kanban', label: 'Kanban', icon: Columns3 }, { to: '/historico', label: 'Histórico', icon: Archive }, ...(canUseUsers ? [{ to: '/usuarios', label: 'Usuários', icon: UsersRound }] : []), { to: '/equipes', label: 'Equipes', icon: UsersRound }];
+  const loadNotifications = useCallback(async () => { const response = await request('/notifications?page=1&pageSize=5&unread=false'); if (!response.ok) return; const body = await response.json(); setNotifications(body.data?.notifications ?? []); setUnread(body.data?.meta?.unread ?? 0); }, [request]);
+  useEffect(() => { const keydown = (event: KeyboardEvent) => { if (event.key === 'Escape') { setMobileOpen(false); setNoticeOpen(false); } }; document.addEventListener('keydown', keydown); return () => document.removeEventListener('keydown', keydown); }, []);
+  useEffect(() => { if (!noticeOpen) return undefined; const close = (event: MouseEvent) => { if (notices.current && !notices.current.contains(event.target as Node)) setNoticeOpen(false); }; document.addEventListener('mousedown', close); return () => document.removeEventListener('mousedown', close); }, [noticeOpen]);
+  const closeMobile = () => setMobileOpen(false);
+  const markRead = async (id: string) => { const response = await request(`/notifications/${id}/read`, { method: 'PATCH' }); if (response.ok) { setNotifications((items) => items.map((item) => item.id === id ? { ...item, readAt: new Date().toISOString() } : item)); setUnread((count) => Math.max(0, count - 1)); } };
+  const nav = (compact = false) => links.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} onClick={closeMobile} title={compact ? label : undefined} end={to === '/kanban'} aria-label={compact ? label : undefined} className={({ isActive }) => `mb-1 flex min-h-11 items-center rounded-xl text-sm font-semibold ${compact ? 'justify-center px-2' : 'gap-3 px-3'} ${isActive ? 'bg-brand-100 text-brand-900' : 'text-muted hover:bg-background'}`}><Icon size={19} />{!compact && <span>{label}</span>}</NavLink>);
+  return <div className="min-h-screen overflow-x-hidden bg-background text-text"><header className="sticky top-0 z-50 flex h-16 w-full items-center border-b border-brand-700/30 bg-brand-900 px-3 text-white sm:px-5"><button type="button" onClick={() => setExpanded((value) => !value)} className="hidden min-h-11 min-w-11 place-items-center rounded-lg hover:bg-white/10 md:grid" aria-label={expanded ? 'Recolher navegação' : 'Expandir navegação'} aria-expanded={expanded}><Menu size={21} /></button><button type="button" onClick={() => setMobileOpen((value) => !value)} className="grid min-h-11 min-w-11 place-items-center rounded-lg hover:bg-white/10 md:hidden" aria-label={mobileOpen ? 'Fechar navegação' : 'Abrir navegação'} aria-expanded={mobileOpen}>{mobileOpen ? <X size={21} /> : <Menu size={21} />}</button><img src={logo} alt="Secretaria de Estado de Agricultura Familiar de Mato Grosso" className="ml-2 h-11 w-auto max-w-[12rem] rounded bg-white p-1 object-contain" /><div className="min-w-0 flex-1" /><div className="hidden text-right sm:block"><p className="text-sm font-semibold">{user.name}</p><p className="text-xs text-white/70">{user.role.label}</p></div>{canManageCalendars && <Link to="/calendarios" className="hidden min-h-11 items-center px-2 text-xs font-semibold text-white/85 hover:text-white sm:inline-flex"><CalendarDays size={17} className="mr-1" />Calendários</Link>}<div ref={notices} className="relative"><button type="button" onClick={() => { setNoticeOpen((value) => !value); void loadNotifications(); }} className="relative grid min-h-11 min-w-11 place-items-center rounded-lg hover:bg-white/10" aria-label="Notificações" aria-expanded={noticeOpen}><Bell size={20} />{unread > 0 && <span className="absolute right-1 top-1 min-w-4 rounded-full bg-danger px-1 text-center text-[10px] font-bold">{unread > 9 ? '9+' : unread}</span>}</button>{noticeOpen && <section className="absolute right-0 top-12 z-40 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-border bg-white p-3 text-text shadow-panel" aria-label="Notificações recentes"><div className="mb-2 flex items-center justify-between"><h2 className="font-bold">Notificações</h2><Link to="/notificacoes" onClick={() => setNoticeOpen(false)} className="text-xs font-bold text-brand-700">Ver histórico</Link></div>{notifications.length ? <div className="max-h-80 space-y-1 overflow-y-auto">{notifications.map((item) => <div key={item.id} className={`rounded-lg p-2 ${item.readAt ? '' : 'bg-brand-100/70'}`}><Link to={`/kanban/tarefas/${item.entityId}`} onClick={() => setNoticeOpen(false)} className="block text-sm font-semibold hover:underline">{item.title}</Link><p className="line-clamp-2 text-xs text-muted">{item.body}</p>{!item.readAt && <button onClick={() => void markRead(item.id)} className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-brand-700"><Check size={13} />Marcar como lida</button>}</div>)}</div> : <p className="p-3 text-sm text-muted">Nenhuma notificação recente.</p>}</section>}</div><button onClick={logout} className="grid min-h-11 min-w-11 place-items-center rounded-lg hover:bg-white/10" aria-label="Sair"><LogOut size={20} /></button></header><div className="flex min-h-[calc(100vh-4rem)]"><aside className={`hidden shrink-0 border-r border-border bg-white p-3 transition-[width] duration-200 md:block ${expanded ? 'w-60' : 'w-[4.5rem]'}`} aria-label="Navegação principal">{nav(!expanded)}</aside><main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8"><Outlet /></main></div>{mobileOpen && <div className="fixed inset-0 z-40 bg-slate-950/40 pt-16 md:hidden" onMouseDown={closeMobile}><aside ref={mobilePanel} className="h-full w-72 max-w-[85vw] bg-white p-4 shadow-panel" aria-label="Navegação principal" onMouseDown={(event) => event.stopPropagation()}><div className="mb-4 flex items-center justify-between"><img src={logo} alt="SEAF" className="h-10 w-auto max-w-40 object-contain" /></div>{nav()}</aside></div>}</div>;
 }

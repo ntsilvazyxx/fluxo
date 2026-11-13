@@ -5,6 +5,7 @@ import { executeIdempotent } from '../../shared/http/idempotency.js';
 import { ACTIVE_STATUSES, requireExpectedVersion, TERMINAL_STATUSES, transitionTo } from './task.policy.js';
 import { presentTask } from './task.presenter.js';
 import { calculateAssignmentMetrics } from '../time-accounting/time-accounting.js';
+import { createDeadlineService } from '../deadline/deadline.service.js';
 
 const missing = () => new AppError(404, 'TASK_NOT_FOUND', 'Tarefa não encontrada.');
 const conflict = (code, message) => new AppError(409, code, message);
@@ -165,7 +166,7 @@ async function restartCycle(prisma, request, id, input, key, action) {
   });
 }
 
-export const createTaskService = ({ prisma }) => ({
+export const createTaskService = ({ prisma, attachmentService }) => ({
   async list(actor, filters, mode = 'all') {
     const now = new Date();
     const where = { deletedAt: null, AND: [scopeWhere(actor)] };
@@ -219,17 +220,31 @@ export const createTaskService = ({ prisma }) => ({
 
   async create(request, input, key) {
     requireAdminReason(request, input.reason);
-    return executeIdempotent(prisma, { actorId: request.auth.userId, key, payload: input, status: 201, operation: async (tx) => {
+    let claims = [];
+    const deadlineService = createDeadlineService({ prisma });
+    const acceptanceDeadlineAt = deadlineService.calculateAcceptanceDeadline(new Date(), input.acceptanceDurationMinutes);
+    const result = await executeIdempotent(prisma, { actorId: request.auth.userId, key, payload: input, status: 201, operation: async (tx) => {
       const team = await tx.team.findFirst({ where: { id: input.teamId, isActive: true } });
       if (!team || !(await canManageTeam(tx, request.auth, team.id))) throw new AppError(404, 'TEAM_NOT_FOUND', 'Equipe não encontrada.');
-      const taskId=randomUUID(), cycleId=randomUUID(), now=new Date();
+      const responsible=await tx.user.findFirst({where:{id:input.userId,isActive:true,deletedAt:null},include:{role:true,memberships:{where:{teamId:team.id,leftAt:null}},managedTeams:{where:{teamId:team.id,endedAt:null}}}});
+      const selfGlobal=responsible?.id===request.auth.userId&&['SECRETARY','ADMIN_MASTER'].includes(responsible?.role.code);
+      if(!responsible||(!responsible.memberships.length&&!responsible.managedTeams.length&&!selfGlobal))throw new AppError(422,'ASSIGNEE_NOT_ELIGIBLE','Responsável não elegível para a equipe.');
+      const taskId=randomUUID(), cycleId=randomUUID(), assignmentId=randomUUID(), now=new Date();
       await tx.task.create({ data: { id: taskId, teamId: team.id, createdById: request.auth.userId } });
-      const cycle = await tx.taskCycle.create({ data: { id: cycleId, taskId, cycleNumber: 1, title: input.title, description: input.description, priority: input.priority, openedAt: now } });
+      const cycle = await tx.taskCycle.create({ data: { id: cycleId, taskId, cycleNumber: 1, title: input.title, description: input.description, priority: input.priority, status:'AWAITING_ACCEPTANCE', deadlinePolicy:'RUNNING_CLOCK', acceptanceDurationMinutes:input.acceptanceDurationMinutes, executionDurationMinutes:input.executionDurationMinutes, acceptanceDeadlineAt, openedAt: now } });
       await tx.task.update({ where: { id: taskId }, data: { currentCycleId: cycleId } });
-      await audit(tx, request, { entityType:'Task',entityId:taskId,action:'TASK_CREATED',afterJson:{teamId:team.id,cycleId,title:cycle.title,priority:cycle.priority},reason:input.reason });
-      await outbox(tx, taskId, cycle, 'TASK_CREATED');
+      await tx.taskAssignment.create({data:{id:assignmentId,cycleId,userId:responsible.id,assignedById:request.auth.userId,assignedAt:now,acceptanceDeadlineAt}});
+      await audit(tx, request, { entityType:'Task',entityId:taskId,action:'TASK_CREATED_AND_ASSIGNED',afterJson:{teamId:team.id,cycleId,assignmentId,userId:responsible.id,deadlinePolicy:'RUNNING_CLOCK',acceptanceDeadlineAt,acceptanceDurationMinutes:input.acceptanceDurationMinutes,executionDurationMinutes:input.executionDurationMinutes},reason:input.reason });
+      await outbox(tx, taskId, cycle, 'TASK_ASSIGNED',{userId:responsible.id,assignmentId});
+      claims = await attachmentService.claimInitial(tx, request.auth.userId, cycleId, input.initialAttachmentIds);
       return presentTask(await tx.task.findUnique({ where:{id:taskId},include:includeCurrent }));
     } });
+    if (claims.length) {
+      try { await attachmentService.promoteClaimed(claims); } catch (error) {
+        console.error(JSON.stringify({ event: 'attachment_promotion_failed', taskId: result.body?.id, error: error.message, timestamp: new Date().toISOString() }));
+      }
+    }
+    return result;
   },
 
   async update(request, id, input) {
@@ -246,32 +261,40 @@ export const createTaskService = ({ prisma }) => ({
   },
 
   async assign(request, id, input, key) {
+    const deadlineService = createDeadlineService({ prisma });
     return executeIdempotent(prisma,{actorId:request.auth.userId,key,payload:{id,...input},operation:async(tx)=>{
       const {task,cycle,assignment}=await lockCurrent(tx,id); await requireManagement(tx,request,task.teamId,input.reason); requireExpectedVersion(cycle,input.expectedVersion); transitionTo(cycle.status,'assign');
       if(assignment&&!input.reason)throw new AppError(422,'REASSIGNMENT_REASON_REQUIRED','A reatribuição exige justificativa.');
-      if(input.deadlineAt<=new Date()&&!input.reason)throw new AppError(422,'PAST_DEADLINE_REASON_REQUIRED','Prazo vencido exige justificativa.');
       const user=await tx.user.findFirst({where:{id:input.userId,isActive:true,deletedAt:null},include:{role:true,memberships:{where:{teamId:task.teamId,leftAt:null}},managedTeams:{where:{teamId:task.teamId,endedAt:null}}}});
       const selfGlobal=user?.id===request.auth.userId&&['SECRETARY','ADMIN_MASTER'].includes(user?.role.code);
       if(!user||(!user.memberships.length&&!user.managedTeams.length&&!selfGlobal))throw new AppError(422,'ASSIGNEE_NOT_ELIGIBLE','O responsável não está ativo ou elegível para a equipe.');
-      const calendar=await tx.workCalendar.findFirst({where:{teamId:task.teamId,activeVersionId:{not:null}}});
-      if(!calendar?.activeVersionId)throw new AppError(422,'ACTIVE_CALENDAR_REQUIRED','A equipe precisa de uma versão ativa de calendário antes da atribuição.');
       const now=new Date();
+      let acceptanceDeadlineAt = null;
+      let executionDeadlineAt = null;
+      if(cycle.deadlinePolicy === 'RUNNING_CLOCK') {
+        acceptanceDeadlineAt = deadlineService.calculateAcceptanceDeadline(now, input.acceptanceDurationMinutes);
+      }
       if(assignment){await closePendingRequests(tx,cycle.id,'CLOSED_BY_REASSIGNMENT',request.auth.userId,now);await tx.taskAssignment.update({where:{id:assignment.id},data:{endedAt:now,endReason:'REASSIGNED'}});}
-      const created=await tx.taskAssignment.create({data:{id:randomUUID(),cycleId:cycle.id,userId:user.id,assignedById:request.auth.userId,calendarVersionId:calendar.activeVersionId,assignedAt:now}});
-      if(!cycle.deadlineAt||cycle.deadlineAt.getTime()!==input.deadlineAt.getTime())await tx.deadlineChange.create({data:{id:randomUUID(),cycleId:cycle.id,oldDeadlineAt:cycle.deadlineAt,newDeadlineAt:input.deadlineAt,reason:input.reason??'Prazo definido na atribuição inicial.',changedById:request.auth.userId}});
-      await tx.taskCycle.update({where:{id:cycle.id},data:{status:'AWAITING_ACCEPTANCE',deadlineAt:input.deadlineAt,version:{increment:1}}});
-      await audit(tx,request,{entityType:'TaskAssignment',entityId:created.id,action:assignment?'TASK_REASSIGNED':'TASK_ASSIGNED',afterJson:{taskId:id,cycleId:cycle.id,userId:user.id,deadlineAt:input.deadlineAt},reason:input.reason});await outbox(tx,id,cycle,assignment?'TASK_REASSIGNED':'TASK_ASSIGNED',{userId:user.id,assignmentId:created.id});
+      const created=await tx.taskAssignment.create({data:{id:randomUUID(),cycleId:cycle.id,userId:user.id,assignedById:request.auth.userId,assignedAt:now,acceptanceDeadlineAt}});
+      const cycleData = { status:'AWAITING_ACCEPTANCE', acceptanceDurationMinutes: cycle.deadlinePolicy === 'RUNNING_CLOCK' ? input.acceptanceDurationMinutes : cycle.acceptanceDurationMinutes, executionDurationMinutes: cycle.deadlinePolicy === 'RUNNING_CLOCK' ? input.executionDurationMinutes : cycle.executionDurationMinutes, acceptanceDeadlineAt, executionDeadlineAt, version: { increment: 1 } };
+      await tx.taskCycle.update({where:{id:cycle.id},data:cycleData});
+      await audit(tx,request,{entityType:'TaskAssignment',entityId:created.id,action:assignment?'TASK_REASSIGNED':'TASK_ASSIGNED',afterJson:{taskId:id,cycleId:cycle.id,userId:user.id,deadlinePolicy:cycle.deadlinePolicy,acceptanceDeadlineAt,acceptanceDurationMinutes:input.acceptanceDurationMinutes,executionDurationMinutes:input.executionDurationMinutes,previousAssignmentId: assignment?.id, previousEndedAt: assignment?.endedAt, previousEndReason: assignment?.endReason},reason:input.reason});await outbox(tx,id,cycle,assignment?'TASK_REASSIGNED':'TASK_ASSIGNED',{userId:user.id,assignmentId:created.id,previousAssignmentId: assignment?.id});
       return presentTask(await tx.task.findUnique({where:{id},include:includeCurrent}));
     }});
   },
 
   async accept(request, assignmentId, input, key) {
+    const deadlineService = createDeadlineService({ prisma });
     return executeIdempotent(prisma,{actorId:request.auth.userId,key,payload:{assignmentId,...input},operation:async(tx)=>{
       const initial=await tx.taskAssignment.findUnique({where:{id:assignmentId},include:{cycle:{include:{task:true}}}});if(!initial)throw new AppError(404,'ASSIGNMENT_NOT_FOUND','Atribuição não encontrada.');
       const {task,cycle,assignment}=await lockCurrent(tx,initial.cycle.taskId);requireExpectedVersion(cycle,input.expectedVersion);transitionTo(cycle.status,'accept');
       if(!assignment||assignment.id!==assignmentId||assignment.userId!==request.auth.userId)throw conflict('ASSIGNMENT_NOT_CURRENT','A atribuição não é mais atual ou não pertence a você.');
-      const now=new Date();await tx.taskAssignment.update({where:{id:assignment.id},data:{acceptedAt:now}});await tx.taskCycle.update({where:{id:cycle.id},data:{status:'IN_PROGRESS',version:{increment:1}}});
-      await audit(tx,request,{entityType:'TaskAssignment',entityId:assignment.id,action:'ASSIGNMENT_ACCEPTED',afterJson:{acceptedAt:now}});await outbox(tx,task.id,cycle,'ASSIGNMENT_ACCEPTED',{userId:request.auth.userId,assignmentId:assignment.id});return presentTask(await tx.task.findUnique({where:{id:task.id},include:includeCurrent}));
+      const now=new Date();
+      const waitingMilliseconds = Math.max(0, now.getTime() - assignment.assignedAt.getTime());
+      const acceptedWithinDeadline = deadlineService.validateAcceptanceWithinDeadline(now, assignment.acceptanceDeadlineAt);
+      const executionDeadlineAt=cycle.deadlinePolicy==='RUNNING_CLOCK'?deadlineService.calculateExecutionDeadline(now, cycle.executionDurationMinutes):cycle.deadlineAt;
+      await tx.taskAssignment.update({where:{id:assignment.id},data:{acceptedAt:now}});await tx.taskCycle.update({where:{id:cycle.id},data:{status:'IN_PROGRESS',executionDeadlineAt,version:{increment:1}}});
+      await audit(tx,request,{entityType:'TaskAssignment',entityId:assignment.id,action:'ASSIGNMENT_ACCEPTED',afterJson:{acceptedAt:now,waitingMilliseconds,acceptedWithinDeadline,executionDeadlineAt,executionDurationMinutes:cycle.executionDurationMinutes}});await outbox(tx,task.id,cycle,'ASSIGNMENT_ACCEPTED',{userId:request.auth.userId,assignmentId:assignment.id,waitingMilliseconds,acceptedWithinDeadline});return presentTask(await tx.task.findUnique({where:{id:task.id},include:includeCurrent}));
     }});
   },
 
@@ -280,8 +303,17 @@ export const createTaskService = ({ prisma }) => ({
       const initial=await tx.taskAssignment.findUnique({where:{id:assignmentId},include:{cycle:{include:{task:true}}}});if(!initial)throw new AppError(404,'ASSIGNMENT_NOT_FOUND','Atribuição não encontrada.');
       const {task,cycle,assignment}=await lockCurrent(tx,initial.cycle.taskId);requireExpectedVersion(cycle,input.expectedVersion);transitionTo(cycle.status,'reject');
       if(!assignment||assignment.id!==assignmentId||assignment.userId!==request.auth.userId)throw conflict('ASSIGNMENT_NOT_CURRENT','A atribuição não é mais atual ou não pertence a você.');
-      const now=new Date();await tx.taskAssignment.update({where:{id:assignment.id},data:{endedAt:now,endReason:'REJECTED'}});await tx.taskCycle.update({where:{id:cycle.id},data:{status:'PENDING',deadlineAt:null,version:{increment:1}}});
-      await audit(tx,request,{entityType:'TaskAssignment',entityId:assignment.id,action:'ASSIGNMENT_REJECTED',beforeJson:{deadlineAt:cycle.deadlineAt},afterJson:{deadlineAt:null},reason:input.reason});await outbox(tx,task.id,cycle,'ASSIGNMENT_REJECTED',{userId:request.auth.userId,assignmentId:assignment.id});return presentTask(await tx.task.findUnique({where:{id:task.id},include:includeCurrent}));
+      const now=new Date();
+      const before = { acceptedAt: assignment.acceptedAt, acceptanceDeadlineAt: assignment.acceptanceDeadlineAt, executionDeadlineAt: assignment.executionDeadlineAt };
+      await tx.taskAssignment.update({where:{id:assignment.id},data:{endedAt:now,endReason:'REJECTED'}});
+      const cycleUpdateData = { status:'PENDING', version: { increment: 1 } };
+      if(cycle.deadlinePolicy === 'RUNNING_CLOCK') {
+        cycleUpdateData.deadlineAt = null;
+        cycleUpdateData.acceptanceDeadlineAt = null;
+        cycleUpdateData.executionDeadlineAt = null;
+      }
+      await tx.taskCycle.update({where:{id:cycle.id},data:cycleUpdateData});
+      await audit(tx,request,{entityType:'TaskAssignment',entityId:assignment.id,action:'ASSIGNMENT_REJECTED',beforeJson:{...before,deadlineAt:cycle.deadlineAt},afterJson:{deadlineAt:null,endedAt:now,endReason:'REJECTED'},reason:input.reason});await outbox(tx,task.id,cycle,'ASSIGNMENT_REJECTED',{userId:request.auth.userId,assignmentId:assignment.id,previousAcceptedAt: before.acceptedAt,previousAcceptanceDeadlineAt: before.acceptanceDeadlineAt});return presentTask(await tx.task.findUnique({where:{id:task.id},include:includeCurrent}));
     }});
   },
 

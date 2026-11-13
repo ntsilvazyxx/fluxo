@@ -1,25 +1,31 @@
+import { LockKeyhole, Mail } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import logo from '../../../docs/sdds/assets/logomarca-seaf-original.png';
 import { useAuth } from '../auth/AuthContext.tsx';
+
 export function LoginPage() {
   const { login } = useAuth();
-  const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
-  const submit = async (event) => {
-    event.preventDefault(); setBusy(true); setError(''); const form = new FormData(event.currentTarget);
-    try {
-      await login(String(form.get('email') ?? ''), String(form.get('password') ?? ''));
-    } catch (cause) { setError(cause.message); } finally { setBusy(false); }
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setBusy(true); setError('');
+    const form = new FormData(event.currentTarget);
+    try { await login(String(form.get('email') ?? ''), String(form.get('password') ?? '')); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível entrar.'); }
+    finally { setBusy(false); }
   };
-  return <main className="grid min-h-screen bg-background lg:grid-cols-2">
-    <section className="hidden bg-brand-900 p-12 text-white lg:flex lg:flex-col lg:justify-between"><div className="font-bold">SEAF · Governo de Mato Grosso</div><div><p className="text-sm font-bold uppercase tracking-widest text-blue-200">Ambiente seguro</p><h1 className="mt-5 text-5xl font-extrabold">Gestão pública com clareza, responsabilidade e histórico.</h1></div><p className="text-xs text-white/60">Sistema de Gestão e Acompanhamento de Tarefas</p></section>
-    <section className="flex items-center justify-center p-5"><div className="w-full max-w-md rounded-3xl border border-border bg-white p-7 shadow-card"><span className="grid size-11 place-items-center rounded-xl bg-brand-900 font-black text-white">SE</span><p className="mt-7 text-sm font-bold text-brand-700">Acesso institucional</p>
-      <h1 className="mt-2 text-3xl font-extrabold">Entrar no sistema</h1>
-      <form onSubmit={submit} className="mt-8 space-y-5">
-        <label className="block text-sm font-bold">E-mail<input className="field mt-2" name="email" type="email" autoComplete="username" required /></label>
-        <label className="block text-sm font-bold">Senha<input className="field mt-2" name="password" type="password" autoComplete="current-password" required /></label>
+  return <main className="grid min-h-screen place-items-center bg-slate-50 p-4 sm:p-6">
+    <section className="w-full max-w-md rounded-2xl border border-border bg-white p-6 shadow-card sm:p-8" aria-labelledby="login-title">
+      <img src={logo} alt="Secretaria de Estado de Agricultura Familiar de Mato Grosso" className="mx-auto h-auto max-h-20 w-auto max-w-full object-contain" />
+      <div className="mt-7 text-center"><p className="text-sm font-semibold text-brand-700">Sistema institucional</p><h1 id="login-title" className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Entrar no sistema</h1><p className="mt-2 text-sm text-muted">Gestão e acompanhamento de tarefas da SEAF.</p></div>
+      <form onSubmit={submit} className="mt-7 space-y-5">
+        <label className="block text-sm font-semibold">E-mail<div className="relative mt-2"><Mail className="pointer-events-none absolute left-3 top-3 text-muted" size={18} /><input className="field pl-10" name="email" type="email" autoComplete="username" required /></div></label>
+        <label className="block text-sm font-semibold">Senha<div className="relative mt-2"><LockKeyhole className="pointer-events-none absolute left-3 top-3 text-muted" size={18} /><input className="field pl-10" name="password" type="password" autoComplete="current-password" required /></div></label>
         {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-danger">{error}</p>}
         <button disabled={busy} className="action-primary w-full">{busy ? 'Verificando…' : 'Entrar'}</button>
-      </form><Link className="mt-6 block text-center text-sm font-bold text-brand-700" to="/recuperar-senha">Recuperar acesso</Link>
-    </div></section>
+      </form>
+      <Link className="mt-6 block text-center text-sm font-semibold text-brand-700 hover:underline" to="/recuperar-senha">Esqueceu a senha?</Link>
+    </section>
   </main>;
 }

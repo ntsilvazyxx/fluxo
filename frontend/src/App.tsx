@@ -2,7 +2,6 @@ import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthContext.tsx';
 import { AppShell } from './layout/AppShell.tsx';
-const CalendarPage = lazy(() => import('./pages/CalendarPage.tsx').then((module) => ({ default: module.CalendarPage })));
 const KanbanPage = lazy(() => import('./pages/KanbanPage.tsx').then((module) => ({ default: module.KanbanPage })));
 import { LoginPage } from './pages/LoginPage.tsx';
 const TaskDetailPage = lazy(() => import('./pages/TaskDetailPage.tsx').then((module) => ({ default: module.TaskDetailPage })));
@@ -37,16 +36,16 @@ function LegacyMyTasks() {
 }
 
 const managers = ['ADMIN_MASTER', 'SECRETARY', 'MANAGER'];
-const analysts = ['SECRETARY', 'MANAGER'];
+const analysts = ['ADMIN_MASTER', 'SECRETARY', 'MANAGER'];
 const LoadingPage = ({ children }) => <Suspense fallback={<p className="text-muted">Carregando…</p>}>{children}</Suspense>;
 
 function AppRoutes() {
   const { status } = useAuth();
   return <Routes>
     <Route path="/recuperar-senha" element={<PasswordRecoveryPage />} />
-    <Route path="/login" element={status === 'authenticated' ? <Navigate to="/" replace /> : <LoginPage />} />
+    <Route path="/login" element={status === 'authenticated' ? <Navigate to="/kanban" replace /> : <LoginPage />} />
     <Route path="/" element={<Protected><AppShell /></Protected>}>
-      <Route index element={<Roles allowed={analysts}><LoadingPage><DashboardPage /></LoadingPage></Roles>} />
+      <Route index element={<Navigate to="/kanban" replace />} />
       <Route path="dashboard" element={<Roles allowed={analysts}><LoadingPage><DashboardPage /></LoadingPage></Roles>} />
       <Route path="relatorios" element={<Roles allowed={analysts}><LoadingPage><ReportsPage /></LoadingPage></Roles>} />
       <Route path="kanban" element={<KanbanPage />} />
@@ -57,7 +56,6 @@ function AppRoutes() {
       <Route path="tarefas/:id" element={<LegacyTask />} />
       <Route path="usuarios" element={<Roles allowed={['ADMIN_MASTER', 'SECRETARY']}><UsersPage /></Roles>} />
       <Route path="equipes" element={<TeamsPage />} />
-      <Route path="calendarios" element={<Roles allowed={managers}><CalendarPage /></Roles>} />
       <Route path="notificacoes" element={<NotificationsPage />} />
     </Route>
     <Route path="*" element={<Navigate to="/" replace />} />

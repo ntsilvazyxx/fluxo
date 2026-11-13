@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const auth = vi.hoisted(() => ({ request: vi.fn(), upload: vi.fn() }));
-vi.mock('../auth/AuthContext.jsx', () => ({ useAuth: () => auth }));
+vi.mock('../auth/AuthContext.tsx', () => ({ useAuth: () => auth }));
 
 import { ImageGalleryPanel } from './ImageGalleryPanel.tsx';
 

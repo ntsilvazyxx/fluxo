@@ -56,6 +56,29 @@ enum CalendarExceptionType {
   WORKING_PERIOD
 }
 
+enum DeadlinePolicy {
+  LEGACY_CALENDAR
+  RUNNING_CLOCK
+}
+
+enum DeadlineChangeKind {
+  LEGACY
+  EXECUTION_EXTENSION
+  RETURN_PAUSE
+  ADMINISTRATIVE
+}
+
+enum TaskAttachmentOrigin {
+  INITIAL
+  EXECUTION
+}
+
+enum StagedUploadStatus {
+  STAGED
+  CLAIMED
+  EXPIRED
+}
+
 enum OutboxStatus {
   PENDING
   PROCESSING
@@ -111,6 +134,8 @@ model User {
   requestsDecided         TaskRequest[]            @relation("RequestDecider")
   deadlineChanges         DeadlineChange[]         @relation("DeadlineChangeAuthor")
   imagesUploaded          TaskImage[]              @relation("TaskImageUploader")
+  attachmentsUploaded     TaskAttachment[]         @relation("TaskAttachmentUploader")
+  stagedUploads          StagedUpload[]
   cycleNotes              TaskCycleNote[]          @relation("TaskCycleNoteAuthor")
   calendarVersionsCreated CalendarVersion[]        @relation("CalendarVersionAuthor")
   auditEvents             AuditEvent[]             @relation("AuditActor")
@@ -272,6 +297,11 @@ model TaskCycle {
   description     String           @db.Text
   priority        TaskPriority     @default(NORMAL)
   status          TaskCycleStatus  @default(PENDING)
+  deadlinePolicy  DeadlinePolicy   @default(LEGACY_CALENDAR)
+  acceptanceDurationMinutes Int?   @db.UnsignedInt
+  executionDurationMinutes  Int?   @db.UnsignedInt
+  acceptanceDeadlineAt       DateTime? @db.DateTime(3)
+  executionDeadlineAt        DateTime? @db.DateTime(3)
   deadlineAt      DateTime?        @db.DateTime(3)
   version         Int              @default(0) @db.UnsignedInt
   openedAt        DateTime         @db.DateTime(3)
@@ -286,11 +316,14 @@ model TaskCycle {
   requests        TaskRequest[]
   deadlineChanges DeadlineChange[]
   images          TaskImage[]
+  attachments     TaskAttachment[]
   notes           TaskCycleNote[]
 
   @@unique([taskId, cycleNumber])
   @@unique([id, taskId])
   @@index([status, deadlineAt])
+  @@index([status, acceptanceDeadlineAt])
+  @@index([status, executionDeadlineAt])
   @@index([priority, status])
   @@map("task_cycles")
 }
@@ -300,7 +333,8 @@ model TaskAssignment {
   cycleId           String               @db.Char(36)
   userId            String               @db.Char(36)
   assignedById      String               @db.Char(36)
-  calendarVersionId String               @db.Char(36)
+  calendarVersionId String?              @db.Char(36)
+  acceptanceDeadlineAt DateTime?         @db.DateTime(3)
   assignedAt        DateTime             @db.DateTime(3)
   acceptedAt        DateTime?            @db.DateTime(3)
   endedAt           DateTime?            @db.DateTime(3)
@@ -309,7 +343,7 @@ model TaskAssignment {
   cycle             TaskCycle            @relation(fields: [cycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   user              User                 @relation("AssignmentResponsible", fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   assignedBy        User                 @relation("AssignmentAuthor", fields: [assignedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  calendarVersion   CalendarVersion      @relation(fields: [calendarVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  calendarVersion   CalendarVersion?     @relation(fields: [calendarVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   requests          TaskRequest[]
   pauseIntervals    TaskPauseInterval[]
 
@@ -364,6 +398,7 @@ model DeadlineChange {
   cycleId       String    @db.Char(36)
   oldDeadlineAt DateTime? @db.DateTime(3)
   newDeadlineAt DateTime  @db.DateTime(3)
+  kind          DeadlineChangeKind @default(LEGACY)
   reason        String    @db.Text
   changedById   String    @db.Char(36)
   createdAt     DateTime  @default(now()) @db.DateTime(3)
@@ -371,6 +406,7 @@ model DeadlineChange {
   changedBy     User      @relation("DeadlineChangeAuthor", fields: [changedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@index([cycleId, createdAt])
+  @@index([cycleId, kind, createdAt])
   @@index([changedById])
   @@map("deadline_changes")
 }
@@ -391,6 +427,45 @@ model TaskImage {
   @@index([cycleId, deletedAt])
   @@index([uploadedById])
   @@map("task_images")
+}
+
+model TaskAttachment {
+  id           String               @id @db.Char(36)
+  cycleId      String               @db.Char(36)
+  uploadedById String               @db.Char(36)
+  origin       TaskAttachmentOrigin
+  originalName String               @db.VarChar(255)
+  storageKey   String               @unique @db.VarChar(512)
+  mimeType     String               @db.VarChar(100)
+  sizeBytes    BigInt               @db.UnsignedBigInt
+  checksum     String               @db.Char(64)
+  createdAt    DateTime             @default(now()) @db.DateTime(3)
+  deletedAt    DateTime?            @db.DateTime(3)
+  cycle        TaskCycle            @relation(fields: [cycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  uploadedBy   User                 @relation("TaskAttachmentUploader", fields: [uploadedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([cycleId, origin, deletedAt])
+  @@index([uploadedById])
+  @@map("task_attachments")
+}
+
+model StagedUpload {
+  id           String             @id @db.Char(36)
+  uploadedById String             @db.Char(36)
+  originalName String             @db.VarChar(255)
+  stagingKey   String             @unique @db.VarChar(512)
+  mimeType     String             @db.VarChar(100)
+  sizeBytes    BigInt             @db.UnsignedBigInt
+  checksum     String             @db.Char(64)
+  status       StagedUploadStatus @default(STAGED)
+  expiresAt    DateTime           @db.DateTime(3)
+  claimedAt    DateTime?          @db.DateTime(3)
+  createdAt    DateTime           @default(now()) @db.DateTime(3)
+  uploadedBy   User               @relation(fields: [uploadedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([uploadedById, status, expiresAt])
+  @@index([status, expiresAt])
+  @@map("staged_uploads")
 }
 
 model TaskCycleNote {

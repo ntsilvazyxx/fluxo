@@ -146,3 +146,15 @@ Este registro contém somente decisões técnicas reversíveis. Regras de negóc
 - Secretário tem escopo global; Gestor opera equipes sob gestão; Técnico acessa somente tarefas próprias. Recursos fora do escopo retornam 404 e os filtros nunca ampliam o escopo do ator.
 - O Kanban mantém somente `PENDING`, `AWAITING_ACCEPTANCE` e `IN_PROGRESS`; `COMPLETED` e `CANCELLED` são apresentados no histórico separado.
 
+
+
+## 2026-11-13 — Simplificação de navegação institucional
+
+O menu lateral principal foi reduzido a Kanban, Histórico, Usuários (quando autorizado) e Equipes. Calendários continuam disponíveis somente por acesso secundário no cabeçalho para Secretário e Gestor; notificações foram concentradas no sino do cabeçalho e a página completa permanece como histórico. Dashboard e relatórios mantêm suas rotas, sem item no menu lateral. A fonte é uma pilha nativa compatível com SF Pro, sem distribuir arquivos proprietários.
+
+O cadastro público não foi implementado: o modelo atual não possui solicitação de acesso, convite ou aprovação. A tela Equipes permanece compacta e usa o contrato existente, que aceita somente `name`; descrição de equipe não foi adicionada para não exigir alteração de schema ou regra de negócio.
+
+
+## 2026-11-13 — ADMIN MASTER com administração global permanente
+
+ADMIN MASTER possui acesso administrativo global e permanente aos módulos existentes. A autorização de Kanban, dashboard, relatórios e gestão de calendários inclui esse perfil no backend; não foram criadas flags temporárias de homologação. O acesso global preserva as validações de estado, justificativas obrigatórias, transações, locks e auditoria. Técnico permanece limitado à fonte pessoal no Kanban.

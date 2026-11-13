@@ -18,7 +18,16 @@ export const transitionTo = (status, action) => {
   return next;
 };
 
-export const isOverdue = (cycle, now = new Date()) => Boolean(cycle.deadlineAt && ACTIVE_STATUSES.includes(cycle.status) && new Date(cycle.deadlineAt) < now);
+export const activeDeadlineAt = (cycle) => {
+  if (cycle?.deadlinePolicy !== 'RUNNING_CLOCK') return cycle?.deadlineAt ?? null;
+  return cycle.status === 'AWAITING_ACCEPTANCE'
+    ? cycle.acceptanceDeadlineAt
+    : cycle.status === 'IN_PROGRESS'
+      ? cycle.executionDeadlineAt
+      : null;
+};
+
+export const isOverdue = (cycle, now = new Date()) => Boolean(activeDeadlineAt(cycle) && ACTIVE_STATUSES.includes(cycle.status) && new Date(activeDeadlineAt(cycle)) < now);
 
 export const requireExpectedVersion = (cycle, expectedVersion) => {
   if (cycle.version !== expectedVersion) throw new AppError(409, 'TASK_VERSION_CONFLICT', 'A tarefa foi alterada por outra pessoa. Atualize os dados e tente novamente.', { currentVersion: cycle.version });

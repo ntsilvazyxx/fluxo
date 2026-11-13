@@ -11,8 +11,7 @@ import { dashboardSchema, reportSchema } from './dashboard.schemas.js';
 const createController = (dependencies) => createDashboardController({ service: createDashboardService(dependencies) });
 const secure = (router, dependencies) => {
   router.use(authenticate(dependencies));
-  // ADMIN MASTER and TECHNICIAN intentionally have no managerial analytics access.
-  router.use(requireRoles('SECRETARY', 'MANAGER'));
+  router.use(requireRoles('ADMIN_MASTER', 'SECRETARY', 'MANAGER'));
 };
 
 export const createDashboardRouter = (dependencies) => {

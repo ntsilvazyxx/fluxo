@@ -75,6 +75,10 @@ export const env = Object.freeze({
   imageStoragePath:
     process.env.IMAGE_STORAGE_PATH ??
     fileURLToPath(new URL('../../storage/images', import.meta.url)),
+  attachmentStoragePath: process.env.ATTACHMENT_STORAGE_PATH ?? fileURLToPath(new URL('../../storage/attachments', import.meta.url)),
+  attachmentUploadTimeoutMs: parsePositiveInteger('ATTACHMENT_UPLOAD_TIMEOUT_MS', process.env.ATTACHMENT_UPLOAD_TIMEOUT_MS, 300000),
+  attachmentTechnicalMaxBytes: parsePositiveInteger('ATTACHMENT_TECHNICAL_MAX_BYTES', process.env.ATTACHMENT_TECHNICAL_MAX_BYTES, 1073741824),
+  attachmentStagingTtlMinutes: parsePositiveInteger('ATTACHMENT_STAGING_TTL_MINUTES', process.env.ATTACHMENT_STAGING_TTL_MINUTES, 60),
   mailEnabled: process.env.MAIL_ENABLED === '1',
   mailHost: process.env.MAIL_HOST ?? 'localhost',
   mailPort: parsePositiveInteger('MAIL_PORT', process.env.MAIL_PORT, 25),

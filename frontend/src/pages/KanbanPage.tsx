@@ -4,11 +4,11 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.tsx';
 import { EmptyTasks, TaskCard } from '../tasks/task-ui.tsx';
 import { useTasks } from '../tasks/useTasks.ts';
-import { kanbanFilterKeys, operationalColumns, personalColumns, taskQuery } from '../tasks/kanban.ts';
+import { kanbanFilterKeys, operationalColumns, taskQuery } from '../tasks/kanban.ts';
 
 export function KanbanPage() {
   const { request, user } = useAuth();
-  const managerial = ['SECRETARY', 'MANAGER'].includes(user.role.code);
+  const managerial = ['ADMIN_MASTER', 'SECRETARY', 'MANAGER'].includes(user.role.code);
   const [params, setParams] = useSearchParams();
   const filters = Object.fromEntries(kanbanFilterKeys.map((key) => [key, params.get(key) ?? '']));
   const [expanded, setExpanded] = useState(false);
@@ -49,7 +49,8 @@ export function KanbanPage() {
   const pagination = (key, page) => setParams((current) => {
     const next = new URLSearchParams(current); next.set(key, String(page)); return next;
   });
-  const columns = managerial ? [['MINE', 'Minhas tarefas'], ...operationalColumns] : personalColumns;
+  // Técnicos e ADMIN MASTER usam somente a fonte pessoal; status permanece no cartão.
+  const columns = managerial ? [['MINE', 'Minhas tarefas'], ...operationalColumns] : [['MINE', 'Minhas tarefas']];
   const search = params.toString() ? `?${params}` : '';
 
   return <div>

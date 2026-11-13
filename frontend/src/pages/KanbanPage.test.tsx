@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter } from 'react-router-dom';
 import { KanbanPage } from './KanbanPage.tsx';
 const auth = vi.hoisted(() => ({ request: vi.fn(), user: null }));
-vi.mock('../auth/AuthContext.jsx', () => ({ useAuth: () => auth }));
+vi.mock('../auth/AuthContext.tsx', () => ({ useAuth: () => auth }));
 const task = (id, title, status = 'AWAITING_ACCEPTANCE') => ({ id, publicNumber: id, team: { name: 'Equipe autorizada' }, cycle: { title, status, priority: 'NORMAL', deadlineAt: '2027-01-04T12:00:00Z', assignment: { userId: 'self', user: { name: 'Responsável de teste' } } } });
 const response = (tasks, page = 1, total = tasks.length) => ({ ok: true, json: async () => ({ data: { tasks }, meta: { page, pageSize: 100, total, totalPages: Math.ceil(total / 100) } }) });
 const open = (entry = '/kanban') => render(<MemoryRouter initialEntries={[entry]}><KanbanPage /></MemoryRouter>);
@@ -26,15 +26,24 @@ describe('Kanban unificado', () => {
     expect(auth.request.mock.calls.every((call) => call.length === 1)).toBe(true);
     expect(auth.request.mock.calls.some(([path]) => ['/teams', '/users'].includes(path))).toBe(false);
   });
-  for (const role of ['TECHNICIAN', 'ADMIN_MASTER']) it(`${role} só consulta tarefas pessoais e não recebe controles gerenciais`, async () => {
-    auth.user.role.code = role; open();
+  it('TECHNICIAN consulta somente tarefas pessoais e não recebe controles gerenciais', async () => {
+    auth.user.role.code = 'TECHNICIAN'; open();
     await screen.findByRole('heading', { name: 'Entrega concluída' });
-    expect(screen.getAllByRole('heading', { level: 2 }).map((node) => node.textContent)).toEqual(['Aguardando aceite', 'Em andamento', 'Concluídas']);
+    expect(screen.getAllByRole('heading', { level: 2 }).map((node) => node.textContent)).toEqual(['Minhas tarefas']);
     fireEvent.click(screen.getByRole('button', { name: 'Filtros' }));
     expect(screen.queryByRole('combobox', { name: 'Equipe' })).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Responsável' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Nova tarefa' })).not.toBeInTheDocument();
     expect(auth.request.mock.calls.every(([path]) => path.startsWith('/my-tasks?'))).toBe(true);
+  });
+  it('ADMIN_MASTER possui Kanban global e controles gerenciais', async () => {
+    auth.user.role.code = 'ADMIN_MASTER'; open();
+    await screen.findByRole('heading', { name: 'Entrega da equipe' });
+    expect(screen.getAllByRole('heading', { level: 2 }).map((node) => node.textContent)).toEqual(['Minhas tarefas', 'Pendente', 'Aguardando aceite', 'Em andamento']);
+    fireEvent.click(screen.getByRole('button', { name: 'Filtros' }));
+    expect(screen.getByRole('combobox', { name: 'Equipe' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Nova tarefa' })).toBeInTheDocument();
+    expect(auth.request.mock.calls.some(([path]) => path.startsWith('/kanban?'))).toBe(true);
   });
   it('filtros avançados são recolhidos, controlados e limpos nas duas consultas', async () => {
     open(); await screen.findByRole('heading', { name: 'Entrega da equipe' });

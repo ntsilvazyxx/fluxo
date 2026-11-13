@@ -1,2 +1,2 @@
-import{render,screen}from'@testing-library/react';import{MemoryRouter}from'react-router-dom';import{describe,expect,it,vi}from'vitest';import{App}from'./App.jsx';
+import{render,screen}from'@testing-library/react';import{MemoryRouter}from'react-router-dom';import{describe,expect,it,vi}from'vitest';import{App}from'./App.tsx';
 describe('autenticação',()=>{it('exibe login sem sessão',async()=>{vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:false}));render(<MemoryRouter initialEntries={['/login']}><App/></MemoryRouter>);expect(await screen.findByRole('heading',{name:'Entrar no sistema'})).toBeInTheDocument();expect(screen.getByLabelText('E-mail')).toBeInTheDocument();expect(screen.getByLabelText('Senha')).toBeInTheDocument()})});

@@ -15,7 +15,7 @@ const initialSchedules = () => [1, 2, 3, 4, 5].flatMap((weekday) => [
 
 export function CalendarPage() {
   const { request, user } = useAuth();
-  const canEdit = ['SECRETARY', 'MANAGER'].includes(user.role.code);
+  const canEdit = ['ADMIN_MASTER', 'SECRETARY', 'MANAGER'].includes(user.role.code);
   const [calendars, setCalendars] = useState([]);
   const [teams, setTeams] = useState([]);
   const [selectedId, setSelectedId] = useState('');
