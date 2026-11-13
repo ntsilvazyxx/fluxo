@@ -9,7 +9,7 @@
 ## Requisitos locais
 
 - Node.js 26.13.0 (o projeto requer Node.js >= 22.12.0).
-- npm 10 ou superior.
+- npm 11.20.0 (o projeto requer npm >= 10.0.0).
 - MariaDB 10.11.16 (XAMPP) ou servidor MariaDB/MySQL compatível.
 - Prisma ORM 7.10.1, instalado pelas dependências do projeto.
 
