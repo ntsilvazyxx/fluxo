@@ -65,7 +65,6 @@ export function TaskDetailPage() {
   const currentAssignment = cycle?.assignments.find((item) => !item.endedAt);
   const own = currentAssignment?.userId === user.id;
   const pending = cycle?.requests.find((item) => item.status === 'PENDING');
-  const openSubtasks = (task.subtasks ?? []).filter((item) => item.parentCycleId === currentCycle.id && ['PENDING', 'AWAITING_ACCEPTANCE', 'IN_PROGRESS'].includes(item.cycle.status));
   const policy = currentCycle.deadlinePolicy;
 
   return (
@@ -106,7 +105,7 @@ export function TaskDetailPage() {
       </section>
       {error && <p role="alert" className="mt-5 rounded-xl bg-red-50 p-3 text-danger">{error}</p>}
       <TaskMetrics cycle={currentCycle} assignment={currentAssignment} policy={policy} />
-      <TaskLifecyclePanel task={task} cycle={currentCycle} users={users} canManage={canManage} busy={busy} mutate={mutate} />
+      <TaskLifecyclePanel task={task} cycle={currentCycle} canManage={canManage} busy={busy} mutate={mutate} />
       <ImageGalleryPanel taskId={task.id} cycleVersion={currentCycle.version} />
       <TaskAttachmentsPanel taskId={task.id} cycle={currentCycle} upload={upload} request={request} files={executionFiles} setFiles={setExecutionFiles} progress={executionProgress} setProgress={setExecutionProgress} uploading={executionUploading} setUploading={setExecutionUploading} own={own} policy={policy} status={currentCycle.status} load={load} />
 
@@ -114,7 +113,7 @@ export function TaskDetailPage() {
         {own && currentCycle.status === 'AWAITING_ACCEPTANCE' && <Action title="Responder atribuição"><button disabled={busy} onClick={() => mutate(`/assignments/${currentAssignment.id}/accept`, { expectedVersion: currentCycle.version })} className="action-primary"><Check size={18} />Aceitar tarefa</button><ReasonAction label="Rejeitar atribuição" danger busy={busy} onSubmit={(reason) => mutate(`/assignments/${currentAssignment.id}/reject`, { expectedVersion: currentCycle.version, reason })} /></Action>}
         {own && currentCycle.status === 'IN_PROGRESS' && !pending && <Action title="Solicitações"><RequestActions busy={busy} version={currentCycle.version} taskId={id} mutate={mutate} policy={policy} /></Action>}
         {pending && <Action title="Solicitação pendente"><p className="text-sm text-muted">{pending.type === 'RETURN' ? 'Devolução' : 'Prorrogação'} solicitada em {localeDate(pending.createdAt)}.</p><p className="text-sm">{pending.reason}</p>{pending.proposedDeadlineAt && <p className="mt-2 text-xs">Novo vencimento proposto: {localeDate(pending.proposedDeadlineAt)}</p>}{canManage && <DecisionActions requestItem={pending} version={currentCycle.version} busy={busy} mutate={mutate} requireReason={user.role.code === 'ADMIN_MASTER'} />}</Action>}
-        {own && currentCycle.status === 'IN_PROGRESS' && pending?.type !== 'RETURN' && !openSubtasks.length && <Action title="Concluir tarefa"><TextAction label="Descrição dos resultados" button="Concluir tarefa" busy={busy} onSubmit={(completionText) => mutate(`/tasks/${id}/complete`, { expectedVersion: currentCycle.version, completionText })} /></Action>}
+        {own && currentCycle.status === 'IN_PROGRESS' && pending?.type !== 'RETURN' && <Action title="Concluir tarefa"><TextAction label="Descrição dos resultados" button="Concluir tarefa" busy={busy} onSubmit={(completionText) => mutate(`/tasks/${id}/complete`, { expectedVersion: currentCycle.version, completionText })} /></Action>}
         {canManage && ['PENDING', 'AWAITING_ACCEPTANCE', 'IN_PROGRESS'].includes(currentCycle.status) && <Action title={currentAssignment ? 'Reatribuir responsável' : 'Atribuir responsável'}><AssignmentForm users={users} version={currentCycle.version} busy={busy} policy={policy} onSubmit={(data) => mutate(`/tasks/${id}/assignments`, data)} /></Action>}
         {canManage && ['PENDING', 'AWAITING_ACCEPTANCE', 'IN_PROGRESS'].includes(currentCycle.status) && <Action title="Editar tarefa"><EditForm cycle={currentCycle} busy={busy} onSubmit={(data) => mutate(`/tasks/${id}`, data, 'PATCH')} /></Action>}
         {canManage && ['PENDING', 'AWAITING_ACCEPTANCE', 'IN_PROGRESS'].includes(currentCycle.status) && <Action title="Cancelar tarefa"><ReasonAction label="Cancelar definitivamente" danger busy={busy} onSubmit={(reason) => mutate(`/tasks/${id}/cancel`, { expectedVersion: currentCycle.version, reason })} /></Action>}

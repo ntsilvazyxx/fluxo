@@ -1,8 +1,9 @@
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { openGuardedIntegration, validateIntegrationEnvironment } from './integration-guard.js';
+import { openGuardedIntegration, validateIntegrationEnvironment, writableIntegrationDatabase } from './integration-guard.js';
 
 const url = validateIntegrationEnvironment(process.env);
+writableIntegrationDatabase(process.env); // The first campaign is evidence, never a reusable write target.
 const checked = await openGuardedIntegration();
 await checked.$disconnect();
 const result = spawnSync(process.execPath, ['--test', '--test-concurrency=1', 'test/integration/*.test.js'], {

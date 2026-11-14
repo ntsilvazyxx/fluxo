@@ -1,4 +1,4 @@
-import { Pencil, Plus, Search, X } from 'lucide-react';
+import { KeyRound, Pencil, Plus, Search, UserCheck, UserX, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthContext.tsx';
 
@@ -6,11 +6,218 @@ type User = { id: string; name: string; email: string; isActive: boolean; role: 
 const roles = ['ADMIN_MASTER', 'SECRETARY', 'MANAGER', 'TECHNICIAN'];
 
 export function UsersPage() {
-  const { request, user: actor } = useAuth(); const [users, setUsers] = useState<User[]>([]); const [query, setQuery] = useState(''); const [open, setOpen] = useState(false); const [editing, setEditing] = useState<User | null>(null); const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false);
-  const load = useCallback(async () => { const response = await request('/users'); const body = await response.json(); if (!response.ok) throw new Error(body.error?.message ?? 'Não foi possível carregar usuários.'); setUsers(body.data?.users ?? []); }, [request]);
-  useEffect(() => { void Promise.resolve().then(load).catch((error) => setMessage(error instanceof Error ? error.message : 'Erro ao carregar usuários.')); }, [load]);
-  const visible = useMemo(() => users.filter((item) => `${item.name} ${item.email}`.toLocaleLowerCase('pt-BR').includes(query.toLocaleLowerCase('pt-BR').trim())), [query, users]);
-  const canCreate = ['ADMIN_MASTER', 'SECRETARY'].includes(actor.role.code); const canEdit = actor.role.code === 'ADMIN_MASTER';
-  const submit = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); setBusy(true); setMessage(''); const form = new FormData(event.currentTarget); const payload = { name: String(form.get('name') ?? ''), roleCode: String(form.get('roleCode') ?? ''), ...(editing ? { isActive: form.get('isActive') === 'true', reason: String(form.get('reason') ?? '') } : { email: String(form.get('email') ?? ''), password: String(form.get('password') ?? '') }) }; try { const response = await request(editing ? `/users/${editing.id}` : '/users', { method: editing ? 'PATCH' : 'POST', body: JSON.stringify(payload) }); const body = await response.json(); if (!response.ok) throw new Error(body.error?.message ?? 'Não foi possível salvar o usuário.'); setUsers((items) => editing ? items.map((item) => item.id === editing.id ? body.data.user : item) : [...items, body.data.user].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))); setOpen(false); setEditing(null); setMessage(editing ? 'Usuário atualizado com sucesso.' : 'Usuário cadastrado com sucesso.'); } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível salvar o usuário.'); } finally { setBusy(false); } };
-  return <section className="mx-auto max-w-5xl"><div className="flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-3xl font-bold tracking-tight">Usuários</h1><p className="mt-2 text-sm text-muted">Consulte e administre usuários autorizados.</p></div>{canCreate && <button className="action-primary" onClick={() => { setEditing(null); setOpen(true); }}><Plus size={18} />Novo usuário</button>}</div><label className="relative mt-7 block"><Search className="absolute left-3 top-3 text-muted" size={18} /><input className="field pl-10" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Pesquisar por nome ou e-mail" aria-label="Pesquisar usuários" /></label>{message && <p role="status" className="mt-4 rounded-xl bg-brand-100 p-3 text-sm text-brand-900">{message}</p>}<div className="mt-5 divide-y divide-border overflow-hidden rounded-xl border border-border bg-white">{visible.length ? visible.map((item) => <article key={item.id} className="flex items-center justify-between gap-4 p-4"><div className="min-w-0"><p className="font-semibold">{item.name}</p><p className="truncate text-sm text-muted">{item.email}</p></div><div className="flex items-center gap-3"><span className="text-xs font-semibold text-brand-900">{item.role.label} · {item.isActive ? 'Ativo' : 'Inativo'}</span>{canEdit && <button className="grid min-h-11 min-w-11 place-items-center rounded-lg text-brand-700 hover:bg-brand-100" aria-label={`Editar ${item.name}`} onClick={() => { setEditing(item); setOpen(true); }}><Pencil size={17} /></button>}</div></article>) : <p className="p-8 text-center text-sm text-muted">Nenhum usuário encontrado.</p>}</div>{open && <div className="fixed inset-0 z-40 grid place-items-center bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-labelledby="user-form-title"><form onSubmit={submit} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-panel"><div className="flex items-center justify-between"><h2 id="user-form-title" className="text-lg font-bold">{editing ? 'Editar usuário' : 'Novo usuário'}</h2><button type="button" onClick={() => { setOpen(false); setEditing(null); }} className="grid size-10 place-items-center rounded-lg hover:bg-background" aria-label="Fechar"><X size={19} /></button></div><div className="mt-5 space-y-4"><label className="block text-sm font-semibold">Nome<input className="field mt-1" name="name" defaultValue={editing?.name ?? ''} minLength={3} maxLength={160} required /></label>{!editing && <><label className="block text-sm font-semibold">E-mail<input className="field mt-1" name="email" type="email" required /></label><label className="block text-sm font-semibold">Senha<input className="field mt-1" name="password" type="password" minLength={12} required /></label></>}<label className="block text-sm font-semibold">Perfil<select className="field mt-1" name="roleCode" defaultValue={editing?.role.code ?? 'TECHNICIAN'}>{roles.map((role) => <option key={role} value={role}>{role}</option>)}</select></label>{editing && <><label className="block text-sm font-semibold">Situação<select className="field mt-1" name="isActive" defaultValue={String(editing.isActive)}><option value="true">Ativo</option><option value="false">Inativo</option></select></label><label className="block text-sm font-semibold">Justificativa<textarea className="field mt-1" name="reason" minLength={5} required /></label></>}</div><div className="mt-6 flex justify-end gap-2"><button type="button" className="action-secondary" onClick={() => { setOpen(false); setEditing(null); }}>Cancelar</button><button disabled={busy} className="action-primary">{busy ? 'Salvando…' : 'Salvar'}</button></div></form></div>}</section>;
+  const { request, user: actor, logout } = useAuth();
+  const [users, setUsers] = useState<User[]>([]);
+  const [query, setQuery] = useState('');
+  const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
+  const [editing, setEditing] = useState<User | null>(null);
+  const [resetting, setResetting] = useState<User | null>(null);
+  const [changingStatus, setChangingStatus] = useState<User | null>(null);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    const response = await request('/users');
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error?.message ?? 'Não foi possível carregar usuários.');
+    setUsers(body.data?.users ?? []);
+  }, [request]);
+
+  useEffect(() => {
+    void Promise.resolve().then(load).catch((cause) => setError(cause instanceof Error ? cause.message : 'Erro ao carregar usuários.'));
+  }, [load]);
+
+  const visible = useMemo(
+    () => users.filter((item) => `${item.name} ${item.email}`.toLocaleLowerCase('pt-BR').includes(query.toLocaleLowerCase('pt-BR').trim())),
+    [query, users],
+  );
+  const canCreate = ['ADMIN_MASTER', 'SECRETARY'].includes(actor.role.code);
+  const canEdit = actor.role.code === 'ADMIN_MASTER';
+
+  const replaceUser = (updated: User) => setUsers((items) => items.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
+  const closeModals = () => { setFormMode(null); setEditing(null); setResetting(null); setChangingStatus(null); };
+
+  const submitForm = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy(true); setError(''); setMessage('');
+    const form = new FormData(event.currentTarget);
+    const payload = editing
+      ? { name: String(form.get('name') ?? ''), roleCode: String(form.get('roleCode') ?? ''), reason: String(form.get('reason') ?? '') }
+      : { name: String(form.get('name') ?? ''), email: String(form.get('email') ?? ''), password: String(form.get('password') ?? ''), roleCode: String(form.get('roleCode') ?? '') };
+    try {
+      const response = await request(editing ? `/users/${editing.id}` : '/users', { method: editing ? 'PATCH' : 'POST', body: JSON.stringify(payload) });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message ?? 'Não foi possível salvar o usuário.');
+      if (editing) replaceUser(body.data.user);
+      else setUsers((items) => [...items, body.data.user].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')));
+      setMessage(editing ? 'Usuário atualizado com sucesso.' : 'Usuário cadastrado com sucesso.');
+      closeModals();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível salvar o usuário.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitReset = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!resetting) return;
+    const form = new FormData(event.currentTarget);
+    const password = String(form.get('password') ?? '');
+    const confirmation = String(form.get('confirmation') ?? '');
+    setError(''); setMessage('');
+    if (password !== confirmation) { setError('A confirmação da senha não coincide.'); return; }
+    if (password.length < 12 || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
+      setError('A senha deve ter ao menos 12 caracteres, com letra minúscula, maiúscula e número.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const response = await request(`/users/${resetting.id}/password-reset`, {
+        method: 'POST',
+        body: JSON.stringify({ password, reason: String(form.get('reason') ?? '') }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message ?? 'Não foi possível redefinir a senha.');
+      const target = resetting;
+      setResetting(null);
+      if (target.id === actor.id) {
+        await logout();
+      } else {
+        setMessage(`Senha de ${target.name} redefinida. As sessões ativas foram encerradas.`);
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível redefinir a senha.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitStatus = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!changingStatus) return;
+    const form = new FormData(event.currentTarget);
+    setBusy(true); setError(''); setMessage('');
+    try {
+      const response = await request(`/users/${changingStatus.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive: !changingStatus.isActive, reason: String(form.get('reason') ?? '') }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message ?? 'Não foi possível alterar a situação do usuário.');
+      replaceUser(body.data.user);
+      setMessage(changingStatus.isActive ? 'Usuário inativado. Sessões ativas foram encerradas.' : 'Usuário reativado com sucesso.');
+      setChangingStatus(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível alterar a situação do usuário.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="mx-auto max-w-5xl">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Usuários</h1>
+          <p className="mt-2 text-sm text-muted">Consulte e administre usuários autorizados.</p>
+        </div>
+        {canCreate && <button className="action-primary" onClick={() => { setEditing(null); setFormMode('create'); setError(''); setMessage(''); }}><Plus size={18} />Novo usuário</button>}
+      </div>
+
+      <label className="relative mt-7 block">
+        <Search className="absolute left-3 top-3 text-muted" size={18} />
+        <input className="field pl-10" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Pesquisar por nome ou e-mail" aria-label="Pesquisar usuários" />
+      </label>
+
+      {message && <p role="status" className="mt-4 rounded-xl bg-brand-100 p-3 text-sm text-brand-900">{message}</p>}
+      {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-danger">{error}</p>}
+
+      <div className="mt-5 divide-y divide-border overflow-hidden rounded-xl border border-border bg-white">
+        {visible.length ? visible.map((item) => (
+          <article key={item.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <div className="min-w-0">
+              <p className="font-semibold">{item.name}</p>
+              <p className="truncate text-sm text-muted">{item.email}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`text-xs font-semibold ${item.isActive ? 'text-brand-900' : 'text-muted'}`}>{item.role.label} · {item.isActive ? 'Ativo' : 'Inativo'}</span>
+              {canEdit && <>
+                <button className="grid min-h-11 min-w-11 place-items-center rounded-lg text-brand-700 hover:bg-brand-100" aria-label={`Editar ${item.name}`} onClick={() => { setEditing(item); setFormMode('edit'); setError(''); setMessage(''); }}><Pencil size={17} /></button>
+                <button className="grid min-h-11 min-w-11 place-items-center rounded-lg text-brand-700 hover:bg-brand-100" aria-label={`Redefinir senha de ${item.name}`} onClick={() => { setResetting(item); setError(''); setMessage(''); }}><KeyRound size={17} /></button>
+                {item.id !== actor.id && <button className={`grid min-h-11 min-w-11 place-items-center rounded-lg hover:bg-brand-100 ${item.isActive ? 'text-danger' : 'text-success'}`} aria-label={item.isActive ? `Inativar ${item.name}` : `Reativar ${item.name}`} onClick={() => { setChangingStatus(item); setError(''); setMessage(''); }}>{item.isActive ? <UserX size={17} /> : <UserCheck size={17} />}</button>}
+              </>}
+            </div>
+          </article>
+        )) : <p className="p-8 text-center text-sm text-muted">Nenhum usuário encontrado.</p>}
+      </div>
+
+      {formMode && (
+        <div className="fixed inset-0 z-40 grid place-items-center bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-labelledby="user-form-title">
+          <form onSubmit={submitForm} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-panel">
+            <div className="flex items-center justify-between">
+              <h2 id="user-form-title" className="text-lg font-bold">{editing ? 'Editar usuário' : 'Novo usuário'}</h2>
+              <button type="button" onClick={closeModals} className="grid size-10 place-items-center rounded-lg hover:bg-background" aria-label="Fechar"><X size={19} /></button>
+            </div>
+            <div className="mt-5 space-y-4">
+              <label className="block text-sm font-semibold">Nome<input className="field mt-1" name="name" defaultValue={editing?.name ?? ''} minLength={3} maxLength={160} required autoFocus /></label>
+              {!editing && <>
+                <label className="block text-sm font-semibold">E-mail<input className="field mt-1" name="email" type="email" required /></label>
+                <label className="block text-sm font-semibold">Senha<input className="field mt-1" name="password" type="password" minLength={12} required /><span className="mt-1 block text-xs font-normal text-muted">Mínimo de 12 caracteres, com maiúscula, minúscula e número.</span></label>
+              </>}
+              <label className="block text-sm font-semibold">Perfil<select className="field mt-1" name="roleCode" defaultValue={editing?.role.code ?? 'TECHNICIAN'}>{roles.map((role) => <option key={role} value={role}>{role}</option>)}</select></label>
+              {editing && <label className="block text-sm font-semibold">Justificativa<textarea className="field mt-1" name="reason" minLength={5} required /></label>}
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" className="action-secondary" onClick={closeModals}>Cancelar</button>
+              <button disabled={busy} className="action-primary">{busy ? 'Salvando…' : 'Salvar'}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {resetting && (
+        <div className="fixed inset-0 z-40 grid place-items-center bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-labelledby="password-reset-title">
+          <form onSubmit={submitReset} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-panel">
+            <div className="flex items-center justify-between">
+              <h2 id="password-reset-title" className="text-lg font-bold">Redefinir senha</h2>
+              <button type="button" onClick={closeModals} className="grid size-10 place-items-center rounded-lg hover:bg-background" aria-label="Fechar"><X size={19} /></button>
+            </div>
+            <p className="mt-3 text-sm text-muted">Defina uma nova senha para <strong>{resetting.name}</strong>. A senha atual nunca é exibida e todas as sessões ativas serão encerradas.</p>
+            <div className="mt-5 space-y-4">
+              <label className="block text-sm font-semibold">Nova senha<input className="field mt-1" name="password" type="password" minLength={12} required autoFocus /><span className="mt-1 block text-xs font-normal text-muted">Mínimo de 12 caracteres, com maiúscula, minúscula e número.</span></label>
+              <label className="block text-sm font-semibold">Confirmar nova senha<input className="field mt-1" name="confirmation" type="password" minLength={12} required /></label>
+              <label className="block text-sm font-semibold">Justificativa<textarea className="field mt-1" name="reason" minLength={5} required /></label>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" className="action-secondary" onClick={closeModals}>Cancelar</button>
+              <button disabled={busy} className="action-primary">{busy ? 'Redefinindo…' : 'Redefinir senha'}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {changingStatus && (
+        <div className="fixed inset-0 z-40 grid place-items-center bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-labelledby="status-title">
+          <form onSubmit={submitStatus} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-panel">
+            <div className="flex items-center justify-between">
+              <h2 id="status-title" className="text-lg font-bold">{changingStatus.isActive ? 'Inativar usuário' : 'Reativar usuário'}</h2>
+              <button type="button" onClick={closeModals} className="grid size-10 place-items-center rounded-lg hover:bg-background" aria-label="Fechar"><X size={19} /></button>
+            </div>
+            <p className="mt-3 text-sm text-muted">
+              {changingStatus.isActive
+                ? <>O usuário <strong>{changingStatus.name}</strong> não poderá entrar nem receber novas atribuições. Tarefas, histórico e vínculos serão preservados, e as sessões ativas serão encerradas.</>
+                : <>O usuário <strong>{changingStatus.name}</strong> poderá voltar a entrar no sistema e receber atribuições.</>}
+            </p>
+            <label className="mt-5 block text-sm font-semibold">Justificativa<textarea className="field mt-1" name="reason" minLength={5} required autoFocus /></label>
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" className="action-secondary" onClick={closeModals}>Cancelar</button>
+              <button disabled={busy} className="action-primary">{busy ? 'Salvando…' : changingStatus.isActive ? 'Inativar usuário' : 'Reativar usuário'}</button>
+            </div>
+          </form>
+        </div>
+      )}
+    </section>
+  );
 }

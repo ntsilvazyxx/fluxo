@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.tsx';
 
-type Team = { id: string; name: string };
+type Team = { id: string; name: string; isActive: boolean };
 type User = { id: string; name: string; isActive: boolean; role: { code: string; label?: string } };
 type StagedFile = { id: string; originalName: string; mimeType: string; sizeBytes: number; file: File };
 const acceptanceOptions = [[60, '1 hora'], [120, '2 horas'], [240, '4 horas'], [480, '8 horas'], [720, '12 horas'], [1440, '24 horas']];
@@ -11,7 +11,7 @@ const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.pdf', '.doc', '.d
 const extensionOf = (name: string) => `.${name.split('.').pop()?.toLowerCase() ?? ''}`;
 
 export function TaskFormPage() {
-  const { request, upload } = useAuth();
+  const { request, upload, user } = useAuth();
   const navigate = useNavigate();
   const [teams, setTeams] = useState<Team[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
@@ -121,9 +121,10 @@ export function TaskFormPage() {
   };
 
   return (
-    <div className="max-w-3xl">
+    <div className="mx-auto w-full max-w-3xl">
       <p className="text-sm font-bold text-brand-700">Nova tarefa</p>
       <h1 className="mt-1 text-3xl font-extrabold">Criar e encaminhar tarefa</h1>
+      {user.role.code === 'ADMIN_MASTER' && <p role="status" className="mt-4 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-warning">Criação excepcional habilitada somente neste ambiente de testes. A ação será registrada na auditoria.</p>}
       <form onSubmit={submit} className="mt-7 space-y-5 rounded-2xl border border-border bg-white p-5 sm:p-7">
         <Field label="Título">
           <input aria-label="Título" name="title" required minLength={3} maxLength={255} className="field" />
@@ -135,7 +136,7 @@ export function TaskFormPage() {
           <Field label="Equipe">
             <select aria-label="Equipe" name="teamId" required className="field" onChange={(event) => { setSelectedTeamId(event.target.value); setStagedFiles([]); setUploadProgress({}); }}>
               <option value="">Selecione</option>
-              {teams.map((team) => <option value={team.id} key={team.id}>{team.name}</option>)}
+              {teams.filter((team) => team.isActive).map((team) => <option value={team.id} key={team.id}>{team.name}</option>)}
             </select>
           </Field>
           <Field label="Responsável">

@@ -31,6 +31,7 @@ export const createUserService = ({ prisma }) => ({
     });
   },
   async update(request, id, input) {
+    if (input.isActive === false && id === request.auth.userId) throw new AppError(422, 'CANNOT_DEACTIVATE_SELF', 'O administrador não pode inativar a própria conta.');
     return prisma.$transaction(async (tx) => {
       const current = await tx.user.findFirst({ where: { id, deletedAt: null }, include: { role: true } });
       if (!current) throw notFound();
@@ -39,6 +40,17 @@ export const createUserService = ({ prisma }) => ({
       if (input.isActive === false) await tx.userSession.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
       await audit(tx, request, { entityType: 'User', entityId: id, action: 'USER_UPDATED', beforeJson: presentUser(current), afterJson: presentUser(updated), reason: input.reason });
       return presentUser(updated);
+    });
+  },
+  async resetPassword(request, id, input) {
+    const passwordHash = await hashPassword(input.password);
+    return prisma.$transaction(async (tx) => {
+      const current = await tx.user.findFirst({ where: { id, deletedAt: null }, include: { role: true } });
+      if (!current) throw notFound();
+      const updated = await tx.user.update({ where: { id }, data: { passwordHash, version: { increment: 1 } }, include: { role: true } });
+      const revoked = await tx.userSession.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
+      await audit(tx, request, { entityType: 'User', entityId: id, action: 'USER_PASSWORD_RESET_BY_ADMIN', afterJson: { version: updated.version, revokedSessions: revoked.count }, reason: input.reason });
+      return { ...presentUser(updated), revokedSessions: revoked.count };
     });
   },
 });

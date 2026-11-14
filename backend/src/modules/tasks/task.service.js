@@ -15,6 +15,14 @@ const scopeWhere = (actor) => {
   return { currentCycle: { assignments: { some: { userId: actor.userId, OR: [{ endedAt: null }, { endReason: 'COMPLETED' }] } } } };
 };
 const includeCurrent = { team: true, currentCycle: { include: { assignments: { include: { user: true }, orderBy: { assignedAt: 'desc' } } } } };
+// LEGACY_CALENDAR depends on the calendar version snapshotted on the assignment.
+// Historical rows may predate that snapshot; their metrics are unavailable, but
+// the task detail must remain readable. Other inconsistencies still fail loudly.
+const assignmentMetrics = (assignment, deadlinePolicy, observedAt) => (
+  deadlinePolicy === 'LEGACY_CALENDAR' && assignment.acceptedAt && !assignment.calendarVersion
+    ? null
+    : calculateAssignmentMetrics(assignment, observedAt, { deadlinePolicy })
+);
 const audit = (tx, request, data) => tx.auditEvent.create({ data: { id: randomUUID(), actorId: request.auth.userId, correlationId: request.correlationId, ...data } });
 const outbox = (tx, taskId, cycle, type, payload = {}) => tx.outboxEvent.create({ data: { id: randomUUID(), eventType: type, payloadJson: { taskId, cycleId: cycle.id, ...payload }, dedupeKey: `task:${taskId}:${type}:${cycle.version + 1}` } });
 const requireAdminReason = (request, reason) => { if (request.auth.roleCode === 'ADMIN_MASTER' && !reason) throw new AppError(422, 'ADMIN_REASON_REQUIRED', 'A intervenção do ADMIN MASTER exige justificativa.'); };
@@ -215,7 +223,8 @@ export const createTaskService = ({ prisma, attachmentService }) => ({
     ]);
     const ids = [task.id, ...task.cycles.map((cycle)=>cycle.id), ...task.cycles.flatMap((cycle)=>cycle.assignments.map((item)=>item.id))];
     const events = await prisma.auditEvent.findMany({ where: { entityId: { in: ids } }, orderBy: { createdAt: 'asc' } });
-    return { ...presentTask(task), parentTask: parentCycle ? { id: parentCycle.task.id, publicNumber: String(parentCycle.task.publicNumber), cycleId: parentCycle.id, title: parentCycle.title } : null, subtasks: subtasks.map(presentTask), cycles: task.cycles.map((cycle)=>({ id: cycle.id, cycleNumber: cycle.cycleNumber, title: cycle.title, description: cycle.description, priority: cycle.priority, status: cycle.status, deadlineAt: cycle.deadlineAt, version: cycle.version, openedAt: cycle.openedAt, closedAt: cycle.closedAt, completionText: cycle.completionText, assignments: cycle.assignments.map((a)=>({ id:a.id,userId:a.userId,user:{id:a.user.id,name:a.user.name},assignedAt:a.assignedAt,acceptedAt:a.acceptedAt,endedAt:a.endedAt,endReason:a.endReason,calendarVersionId:a.calendarVersionId,pauses:a.pauseIntervals,metrics:calculateAssignmentMetrics(a) })), requests:cycle.requests.map(r=>({id:r.id,type:r.type,status:r.status,reason:r.reason,proposedDeadlineAt:r.proposedDeadlineAt,decidedById:r.decidedById,decidedAt:r.decidedAt,decisionReason:r.decisionReason,createdAt:r.createdAt,pauses:r.pauseIntervals})), deadlineChanges: cycle.deadlineChanges, notes: cycle.notes })), history: events };
+    const observedAt = new Date();
+    return { ...presentTask(task), parentTask: parentCycle ? { id: parentCycle.task.id, publicNumber: String(parentCycle.task.publicNumber), cycleId: parentCycle.id, title: parentCycle.title } : null, subtasks: subtasks.map(presentTask), cycles: task.cycles.map((cycle)=>({ id: cycle.id, cycleNumber: cycle.cycleNumber, title: cycle.title, description: cycle.description, priority: cycle.priority, status: cycle.status, deadlineAt: cycle.deadlineAt, version: cycle.version, openedAt: cycle.openedAt, closedAt: cycle.closedAt, completionText: cycle.completionText, assignments: cycle.assignments.map((a)=>({ id:a.id,userId:a.userId,user:{id:a.user.id,name:a.user.name},assignedAt:a.assignedAt,acceptedAt:a.acceptedAt,endedAt:a.endedAt,endReason:a.endReason,calendarVersionId:a.calendarVersionId,pauses:a.pauseIntervals,metrics:assignmentMetrics(a, cycle.deadlinePolicy, observedAt) })), requests:cycle.requests.map(r=>({id:r.id,type:r.type,status:r.status,reason:r.reason,proposedDeadlineAt:r.proposedDeadlineAt,decidedById:r.decidedById,decidedAt:r.decidedAt,decisionReason:r.decisionReason,createdAt:r.createdAt,pauses:r.pauseIntervals})), deadlineChanges: cycle.deadlineChanges, notes: cycle.notes })), history: events };
   },
 
   async create(request, input, key) {
@@ -224,8 +233,10 @@ export const createTaskService = ({ prisma, attachmentService }) => ({
     const deadlineService = createDeadlineService({ prisma });
     const acceptanceDeadlineAt = deadlineService.calculateAcceptanceDeadline(new Date(), input.acceptanceDurationMinutes);
     const result = await executeIdempotent(prisma, { actorId: request.auth.userId, key, payload: input, status: 201, operation: async (tx) => {
-      const team = await tx.team.findFirst({ where: { id: input.teamId, isActive: true } });
-      if (!team || !(await canManageTeam(tx, request.auth, team.id))) throw new AppError(404, 'TEAM_NOT_FOUND', 'Equipe não encontrada.');
+      const team = await tx.team.findFirst({ where: { id: input.teamId } });
+      if (!team) throw new AppError(404, 'TEAM_NOT_FOUND', 'Equipe não encontrada.');
+      if (!team.isActive) throw new AppError(409, 'TEAM_INACTIVE', 'A equipe está inativa e não aceita novos encaminhamentos.');
+      if (!(await canManageTeam(tx, request.auth, team.id))) throw new AppError(404, 'TEAM_NOT_FOUND', 'Equipe não encontrada.');
       const responsible=await tx.user.findFirst({where:{id:input.userId,isActive:true,deletedAt:null},include:{role:true,memberships:{where:{teamId:team.id,leftAt:null}},managedTeams:{where:{teamId:team.id,endedAt:null}}}});
       const selfGlobal=responsible?.id===request.auth.userId&&['SECRETARY','ADMIN_MASTER'].includes(responsible?.role.code);
       if(!responsible||(!responsible.memberships.length&&!responsible.managedTeams.length&&!selfGlobal))throw new AppError(422,'ASSIGNEE_NOT_ELIGIBLE','Responsável não elegível para a equipe.');
@@ -234,7 +245,7 @@ export const createTaskService = ({ prisma, attachmentService }) => ({
       const cycle = await tx.taskCycle.create({ data: { id: cycleId, taskId, cycleNumber: 1, title: input.title, description: input.description, priority: input.priority, status:'AWAITING_ACCEPTANCE', deadlinePolicy:'RUNNING_CLOCK', acceptanceDurationMinutes:input.acceptanceDurationMinutes, executionDurationMinutes:input.executionDurationMinutes, acceptanceDeadlineAt, openedAt: now } });
       await tx.task.update({ where: { id: taskId }, data: { currentCycleId: cycleId } });
       await tx.taskAssignment.create({data:{id:assignmentId,cycleId,userId:responsible.id,assignedById:request.auth.userId,assignedAt:now,acceptanceDeadlineAt}});
-      await audit(tx, request, { entityType:'Task',entityId:taskId,action:'TASK_CREATED_AND_ASSIGNED',afterJson:{teamId:team.id,cycleId,assignmentId,userId:responsible.id,deadlinePolicy:'RUNNING_CLOCK',acceptanceDeadlineAt,acceptanceDurationMinutes:input.acceptanceDurationMinutes,executionDurationMinutes:input.executionDurationMinutes},reason:input.reason });
+      await audit(tx, request, { entityType:'Task',entityId:taskId,action:'TASK_CREATED_AND_ASSIGNED',afterJson:{teamId:team.id,cycleId,assignmentId,userId:responsible.id,deadlinePolicy:'RUNNING_CLOCK',acceptanceDeadlineAt,acceptanceDurationMinutes:input.acceptanceDurationMinutes,executionDurationMinutes:input.executionDurationMinutes,adminTaskCreationException:request.auth.roleCode==='ADMIN_MASTER'},reason:input.reason });
       await outbox(tx, taskId, cycle, 'TASK_ASSIGNED',{userId:responsible.id,assignmentId});
       claims = await attachmentService.claimInitial(tx, request.auth.userId, cycleId, input.initialAttachmentIds);
       return presentTask(await tx.task.findUnique({ where:{id:taskId},include:includeCurrent }));
@@ -264,18 +275,23 @@ export const createTaskService = ({ prisma, attachmentService }) => ({
     const deadlineService = createDeadlineService({ prisma });
     return executeIdempotent(prisma,{actorId:request.auth.userId,key,payload:{id,...input},operation:async(tx)=>{
       const {task,cycle,assignment}=await lockCurrent(tx,id); await requireManagement(tx,request,task.teamId,input.reason); requireExpectedVersion(cycle,input.expectedVersion); transitionTo(cycle.status,'assign');
+      const team=await tx.team.findUnique({where:{id:task.teamId},select:{isActive:true}});
+      if(!team?.isActive)throw new AppError(409,'TEAM_INACTIVE','A equipe está inativa e não aceita novos encaminhamentos.');
       if(assignment&&!input.reason)throw new AppError(422,'REASSIGNMENT_REASON_REQUIRED','A reatribuição exige justificativa.');
       const user=await tx.user.findFirst({where:{id:input.userId,isActive:true,deletedAt:null},include:{role:true,memberships:{where:{teamId:task.teamId,leftAt:null}},managedTeams:{where:{teamId:task.teamId,endedAt:null}}}});
       const selfGlobal=user?.id===request.auth.userId&&['SECRETARY','ADMIN_MASTER'].includes(user?.role.code);
       if(!user||(!user.memberships.length&&!user.managedTeams.length&&!selfGlobal))throw new AppError(422,'ASSIGNEE_NOT_ELIGIBLE','O responsável não está ativo ou elegível para a equipe.');
       const now=new Date();
+      const calendar = cycle.deadlinePolicy === 'LEGACY_CALENDAR'
+        ? await tx.workCalendar.findFirst({ where: { teamId: task.teamId, activeVersionId: { not: null } }, select: { activeVersionId: true } })
+        : null;
       let acceptanceDeadlineAt = null;
       let executionDeadlineAt = null;
       if(cycle.deadlinePolicy === 'RUNNING_CLOCK') {
         acceptanceDeadlineAt = deadlineService.calculateAcceptanceDeadline(now, input.acceptanceDurationMinutes);
       }
       if(assignment){await closePendingRequests(tx,cycle.id,'CLOSED_BY_REASSIGNMENT',request.auth.userId,now);await tx.taskAssignment.update({where:{id:assignment.id},data:{endedAt:now,endReason:'REASSIGNED'}});}
-      const created=await tx.taskAssignment.create({data:{id:randomUUID(),cycleId:cycle.id,userId:user.id,assignedById:request.auth.userId,assignedAt:now,acceptanceDeadlineAt}});
+      const created=await tx.taskAssignment.create({data:{id:randomUUID(),cycleId:cycle.id,userId:user.id,assignedById:request.auth.userId,calendarVersionId:calendar?.activeVersionId??null,assignedAt:now,acceptanceDeadlineAt}});
       const cycleData = { status:'AWAITING_ACCEPTANCE', acceptanceDurationMinutes: cycle.deadlinePolicy === 'RUNNING_CLOCK' ? input.acceptanceDurationMinutes : cycle.acceptanceDurationMinutes, executionDurationMinutes: cycle.deadlinePolicy === 'RUNNING_CLOCK' ? input.executionDurationMinutes : cycle.executionDurationMinutes, acceptanceDeadlineAt, executionDeadlineAt, version: { increment: 1 } };
       await tx.taskCycle.update({where:{id:cycle.id},data:cycleData});
       await audit(tx,request,{entityType:'TaskAssignment',entityId:created.id,action:assignment?'TASK_REASSIGNED':'TASK_ASSIGNED',afterJson:{taskId:id,cycleId:cycle.id,userId:user.id,deadlinePolicy:cycle.deadlinePolicy,acceptanceDeadlineAt,acceptanceDurationMinutes:input.acceptanceDurationMinutes,executionDurationMinutes:input.executionDurationMinutes,previousAssignmentId: assignment?.id, previousEndedAt: assignment?.endedAt, previousEndReason: assignment?.endReason},reason:input.reason});await outbox(tx,id,cycle,assignment?'TASK_REASSIGNED':'TASK_ASSIGNED',{userId:user.id,assignmentId:created.id,previousAssignmentId: assignment?.id});
@@ -317,7 +333,7 @@ export const createTaskService = ({ prisma, attachmentService }) => ({
     }});
   },
 
-  async complete(request,id,input,key){return executeIdempotent(prisma,{actorId:request.auth.userId,key,payload:{id,...input},operation:async(tx)=>{const{cycle,assignment}=await lockCurrent(tx,id);requireExpectedVersion(cycle,input.expectedVersion);transitionTo(cycle.status,'complete');if(!assignment||assignment.userId!==request.auth.userId)throw conflict('ASSIGNMENT_NOT_CURRENT','Somente o responsável atual pode concluir a tarefa.');if(cycle.requests.some((item)=>item.type==='RETURN'))throw conflict('PENDING_REQUEST_EXISTS','Há devolução pendente para esta atribuição.');const openSubtasks=await tx.task.count({where:{parentCycleId:cycle.id,currentCycle:{status:{in:ACTIVE_STATUSES}}}});if(openSubtasks)throw new AppError(422,'OPEN_SUBTASKS','Conclua ou cancele as subtarefas abertas.');const now=new Date();await closePendingRequests(tx,cycle.id,'CLOSED_BY_COMPLETION',request.auth.userId,now);await tx.taskAssignment.update({where:{id:assignment.id},data:{endedAt:now,endReason:'COMPLETED'}});await tx.taskCycle.update({where:{id:cycle.id},data:{status:'COMPLETED',completionText:input.completionText,closedAt:now,version:{increment:1}}});await audit(tx,request,{entityType:'TaskCycle',entityId:cycle.id,action:'TASK_COMPLETED',afterJson:{completionText:input.completionText,closedAt:now}});await outbox(tx,id,cycle,'TASK_COMPLETED',{userId:request.auth.userId});return presentTask(await tx.task.findUnique({where:{id},include:includeCurrent}));}})},
+  async complete(request,id,input,key){return executeIdempotent(prisma,{actorId:request.auth.userId,key,payload:{id,...input},operation:async(tx)=>{const{cycle,assignment}=await lockCurrent(tx,id);requireExpectedVersion(cycle,input.expectedVersion);transitionTo(cycle.status,'complete');if(!assignment||assignment.userId!==request.auth.userId)throw conflict('ASSIGNMENT_NOT_CURRENT','Somente o responsável atual pode concluir a tarefa.');if(cycle.requests.some((item)=>item.type==='RETURN'))throw conflict('PENDING_REQUEST_EXISTS','Há devolução pendente para esta atribuição.');const now=new Date();await closePendingRequests(tx,cycle.id,'CLOSED_BY_COMPLETION',request.auth.userId,now);await tx.taskAssignment.update({where:{id:assignment.id},data:{endedAt:now,endReason:'COMPLETED'}});await tx.taskCycle.update({where:{id:cycle.id},data:{status:'COMPLETED',completionText:input.completionText,closedAt:now,version:{increment:1}}});await audit(tx,request,{entityType:'TaskCycle',entityId:cycle.id,action:'TASK_COMPLETED',afterJson:{completionText:input.completionText,closedAt:now}});await outbox(tx,id,cycle,'TASK_COMPLETED',{userId:request.auth.userId});return presentTask(await tx.task.findUnique({where:{id},include:includeCurrent}));}})},
 
   async cancel(request,id,input,key){return executeIdempotent(prisma,{actorId:request.auth.userId,key,payload:{id,...input},operation:async(tx)=>{const{root,children}=await lockForCancellation(tx,id);await requireManagement(tx,request,root.task.teamId,input.reason);requireExpectedVersion(root.cycle,input.expectedVersion);transitionTo(root.cycle.status,'cancel');const now=new Date();for(const child of children){await closePendingRequests(tx,child.currentCycle.id,'CLOSED_BY_CANCELLATION',request.auth.userId,now);await tx.taskAssignment.updateMany({where:{cycleId:child.currentCycle.id,endedAt:null},data:{endedAt:now,endReason:'CANCELLED'}});await tx.taskCycle.update({where:{id:child.currentCycle.id},data:{status:'CANCELLED',closedAt:now,version:{increment:1}}});await audit(tx,request,{entityType:'TaskCycle',entityId:child.currentCycle.id,action:'SUBTASK_CANCELLED_WITH_PARENT',reason:input.reason});await tx.outboxEvent.create({data:{id:randomUUID(),eventType:'SUBTASK_CANCELLED_WITH_PARENT',payloadJson:{taskId:child.id,cycleId:child.currentCycle.id,parentTaskId:id},dedupeKey:`task:${child.id}:SUBTASK_CANCELLED_WITH_PARENT:${child.currentCycle.version+1}`}});}await closePendingRequests(tx,root.cycle.id,'CLOSED_BY_CANCELLATION',request.auth.userId,now);if(root.assignment)await tx.taskAssignment.update({where:{id:root.assignment.id},data:{endedAt:now,endReason:'CANCELLED'}});await tx.taskCycle.update({where:{id:root.cycle.id},data:{status:'CANCELLED',closedAt:now,version:{increment:1}}});await audit(tx,request,{entityType:'TaskCycle',entityId:root.cycle.id,action:'TASK_CANCELLED',afterJson:{closedAt:now,cancelledSubtasks:children.length},reason:input.reason});await outbox(tx,id,root.cycle,'TASK_CANCELLED');return presentTask(await tx.task.findUnique({where:{id},include:includeCurrent}));}})},
 

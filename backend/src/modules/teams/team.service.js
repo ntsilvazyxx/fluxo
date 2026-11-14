@@ -18,6 +18,25 @@ export const createTeamService = ({ prisma }) => ({
   async create(req, input) {
     return prisma.$transaction(async (tx) => { const team = await tx.team.create({ data: { id: randomUUID(), name: input.name } }); await audit(tx, req, { entityType: 'Team', entityId: team.id, action: 'TEAM_CREATED', afterJson: view(team) }); return view(team); });
   },
+  async update(req, id, input) {
+    return prisma.$transaction(async (tx) => {
+      const current = await tx.team.findUnique({ where: { id } });
+      if (!current) throw missing();
+      const team = await tx.team.update({ where: { id }, data: { name: input.name, version: { increment: 1 } } });
+      await audit(tx, req, { entityType: 'Team', entityId: id, action: 'TEAM_UPDATED', beforeJson: { name: current.name, version: current.version }, afterJson: { name: team.name, version: team.version } });
+      return view(team);
+    });
+  },
+  async deactivate(req, id) {
+    return prisma.$transaction(async (tx) => {
+      const current = await tx.team.findUnique({ where: { id } });
+      if (!current) throw missing();
+      if (!current.isActive) return view(current);
+      const team = await tx.team.update({ where: { id }, data: { isActive: false, version: { increment: 1 } } });
+      await audit(tx, req, { entityType: 'Team', entityId: id, action: 'TEAM_DEACTIVATED', beforeJson: { isActive: current.isActive, version: current.version }, afterJson: { isActive: team.isActive, version: team.version }, reason: 'Inativação lógica solicitada por usuário autorizado.' });
+      return view(team);
+    });
+  },
   async addLink(req, teamId, userId, kind) {
     return prisma.$transaction(async (tx) => {
       const [team, user] = await Promise.all([tx.team.findFirst({ where: { id: teamId, isActive: true } }), tx.user.findFirst({ where: { id: userId, isActive: true, deletedAt: null }, include: { role: true } })]);

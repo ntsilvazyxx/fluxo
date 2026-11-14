@@ -118,13 +118,14 @@ Nunca use `prisma db push` como substituto das migrações. Os scripts não exec
 
 ### Testes MariaDB reais
 
-Desde a Fase 4C.5, `test:integration` aceita exclusivamente `seaf_gestao_integration`, em `127.0.0.1:3306`. Os bancos `seaf_gestao_dev`, `seaf_gestao_test` e `seaf_gestao_recovery` estão protegidos e são recusados. A preparação do banco e a execução da campanha exigem autorização separada; consulte [PHASE-4C5-VALIDATION.md](docs/PHASE-4C5-VALIDATION.md).
+Na preparação da segunda campanha (Fase 4C.9), o guard reconhece exatamente `seaf_gestao_integration` e `seaf_gestao_integration_2`, em `127.0.0.1:3306`, com seleção obrigatória em `INTEGRATION_DATABASE_NAME`. O primeiro banco é evidência preservada: runner e factories recusam sua reutilização com escrita. A execução futura aceita somente `_2`. Os bancos `seaf_gestao_dev`, `seaf_gestao_test` e `seaf_gestao_recovery` também são recusados. O novo banco ainda não foi criado nesta etapa; provisionamento e campanha exigem autorizações separadas. Consulte [PHASE-4C9-PREPARATION.md](docs/PHASE-4C9-PREPARATION.md).
 
 Somente depois de provisionar as seis migrações e uma conta limitada a SELECT/INSERT/UPDATE/DELETE nesse banco, configure as duas URLs **no processo**, sem alterar `.env`. O exemplo abaixo usa valores fictícios e não deve ser executado antes dessa autorização:
 
 ```powershell
 $env:RUN_DATABASE_INTEGRATION='1'
-$env:DATABASE_URL='mysql://conta_integration:senha_ficticia@127.0.0.1:3306/seaf_gestao_integration'
+$env:INTEGRATION_DATABASE_NAME='seaf_gestao_integration_2'
+$env:DATABASE_URL='mysql://conta_integration_2:senha_ficticia@127.0.0.1:3306/seaf_gestao_integration_2'
 $env:TEST_DATABASE_URL=$env:DATABASE_URL
 npm.cmd run test:integration
 ```

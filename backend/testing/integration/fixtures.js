@@ -3,6 +3,21 @@ import { hashPassword } from '../../src/shared/security/password.js';
 import { presentTask } from '../../src/modules/tasks/task.presenter.js';
 import { requireIntegrationClient } from './context.js';
 const roles = ['ADMIN_MASTER', 'SECRETARY', 'MANAGER', 'TECHNICIAN'];
+// Pure builder shared by guarded factories and database-free regression tests.
+export function cycleFixtureData(taskId, overrides = {}) {
+  const data = { id: randomUUID(), taskId, cycleNumber: 1, title: `Ciclo ${randomUUID()}`, description: 'Ciclo sintético',
+    status: 'PENDING', deadlinePolicy: 'LEGACY_CALENDAR', openedAt: new Date(), ...overrides };
+  for (const field of ['openedAt', 'closedAt']) {
+    if (field === 'closedAt' && data[field] == null) continue;
+    if (data[field] == null) throw new TypeError(`Fixture exige ${field}.`);
+    data[field] = new Date(data[field]);
+    if (!Number.isFinite(data[field].getTime())) throw new TypeError(`Data inválida na fixture: ${field}.`);
+  }
+  const terminal = ['COMPLETED', 'CANCELLED'].includes(data.status);
+  if (terminal !== (data.closedAt != null)) throw new TypeError('Status e encerramento da fixture são incompatíveis.');
+  if (data.closedAt && data.closedAt < data.openedAt) throw new TypeError('Fixture não pode encerrar antes da abertura.');
+  return data;
+}
 export function factories(prisma) {
   requireIntegrationClient(prisma);
   const run = randomUUID();
@@ -29,15 +44,16 @@ export function factories(prisma) {
     },
     // Historical scenarios deliberately bypass the NEW-task API: they represent
     // already persisted legacy records, without weakening the production contract.
-    async legacyTask({ teamId, authorId, title = prefix('Legado'), priority = 'NORMAL', deadlineAt = null, parentCycleId = null }) {
+    async legacyTask({ teamId, authorId, title = prefix('Legado'), priority = 'NORMAL', deadlineAt = null, parentCycleId = null, openedAt = new Date() }) {
+      const seed = cycleFixtureData(randomUUID(), { title, description: 'Fixture histórica sintética LEGACY_CALENDAR', priority, deadlineAt, openedAt });
       return prisma.$transaction(async (tx) => {
-        const task = await tx.task.create({ data: { id: randomUUID(), teamId, createdById: authorId, parentCycleId } });
-        const cycle = await tx.taskCycle.create({ data: { id: randomUUID(), taskId: task.id, cycleNumber: 1, title, description: 'Fixture histórica sintética LEGACY_CALENDAR', priority, deadlinePolicy: 'LEGACY_CALENDAR', deadlineAt } });
+        const task = await tx.task.create({ data: { id: seed.taskId, teamId, createdById: authorId, parentCycleId, createdAt: seed.openedAt } });
+        const cycle = await tx.taskCycle.create({ data: seed });
         await tx.task.update({ where: { id: task.id }, data: { currentCycleId: cycle.id } });
         return presentTask(await tx.task.findUnique({ where: { id: task.id }, include: { team: true, currentCycle: { include: { assignments: { include: { user: true } } } } } }));
       });
     },
-    async cycle(taskId, overrides = {}) { return prisma.taskCycle.create({ data: { id: randomUUID(), taskId, cycleNumber: 1, title: prefix('Ciclo'), description: 'Ciclo sintético', ...overrides } }); },
+    async cycle(taskId, overrides = {}) { return prisma.taskCycle.create({ data: cycleFixtureData(taskId, { title: prefix('Ciclo'), ...overrides }) }); },
     async assignment(cycleId, userId, assignedById, overrides = {}) { return prisma.taskAssignment.create({ data: { id: randomUUID(), cycleId, userId, assignedById, ...overrides } }); },
     async request(cycleId, assignmentId, overrides = {}) { return prisma.taskRequest.create({ data: { id: randomUUID(), cycleId, assignmentId, type: 'RETURN', reason: prefix('Solicitação'), ...overrides } }); },
     async history(actorId, entityId, overrides = {}) { return prisma.auditEvent.create({ data: { id: randomUUID(), actorId, entityType: 'TaskCycle', entityId, action: 'SYNTHETIC_HISTORY', correlationId: randomUUID(), ...overrides } }); },

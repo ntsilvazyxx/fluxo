@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 
 import { createIntegrationPrisma as createPrismaClient } from '../../testing/integration/context.js';
-import { parseIntegrationTarget as parseDatabaseUrl } from '../../testing/integration/context.js';
+import { integrationDatabaseName, parseIntegrationTarget as parseDatabaseUrl } from '../../testing/integration/context.js';
 
 const integrationEnabled = process.env.RUN_DATABASE_INTEGRATION === '1';
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -27,7 +27,7 @@ describe('integridade no MariaDB 10.11 real', { skip: !integrationEnabled }, () 
   before(async () => {
     assert.ok(testDatabaseUrl, 'TEST_DATABASE_URL é obrigatória para integração.');
     const { database } = parseDatabaseUrl(testDatabaseUrl);
-    assert.equal(database, 'seaf_gestao_integration');
+    assert.equal(database, integrationDatabaseName());
 
     prisma = await createPrismaClient(testDatabaseUrl, { connectionLimit: 3 });
     concurrentPrisma = await createPrismaClient(testDatabaseUrl, { connectionLimit: 3 });

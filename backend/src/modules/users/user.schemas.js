@@ -14,3 +14,7 @@ export const updateUserSchema = z.object({
   body: z.object({ name: z.string().trim().min(3).max(160).optional(), roleCode: roles.optional(), isActive: z.boolean().optional(), reason: z.string().trim().min(5).max(1000) }).refine((value) => value.name !== undefined || value.roleCode !== undefined || value.isActive !== undefined, 'Informe uma alteração.'),
   params: z.object({ id: uuid }), query: z.object({}),
 });
+export const adminPasswordResetSchema = z.object({
+  body: z.object({ password: userPasswordSchema, reason: z.string().trim().min(5).max(1000) }),
+  params: z.object({ id: uuid }), query: z.object({}),
+});

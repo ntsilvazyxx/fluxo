@@ -7,8 +7,9 @@ import { useTasks } from '../tasks/useTasks.ts';
 import { kanbanFilterKeys, operationalColumns, taskQuery } from '../tasks/kanban.ts';
 
 export function KanbanPage() {
-  const { request, user } = useAuth();
+  const { request, user, features } = useAuth();
   const managerial = ['ADMIN_MASTER', 'SECRETARY', 'MANAGER'].includes(user.role.code);
+  const canCreateTask = user.role.code === 'ADMIN_MASTER' ? features?.adminTaskCreation === true : managerial;
   const [params, setParams] = useSearchParams();
   const filters = Object.fromEntries(kanbanFilterKeys.map((key) => [key, params.get(key) ?? '']));
   const [expanded, setExpanded] = useState(false);
@@ -56,7 +57,7 @@ export function KanbanPage() {
   return <div>
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div><p className="text-sm font-bold text-brand-700">{managerial ? 'Acompanhamento e execução' : 'Execução pessoal'}</p><h1 className="mt-1 text-3xl font-extrabold">Kanban de tarefas</h1><p className="mt-2 max-w-3xl text-sm text-muted">{managerial ? 'Suas atribuições e o fluxo das equipes autorizadas, no mesmo lugar.' : 'Somente suas atribuições e entregas. Abra um cartão para executar a tarefa e consultar seu histórico.'}</p></div>
-      {managerial && <Link to="/tarefas/nova" className="action-primary"><Plus size={18} />Nova tarefa</Link>}
+      {canCreateTask && <Link to="/tarefas/nova" className="action-primary"><Plus size={18} />Nova tarefa</Link>}
     </div>
 
     <section aria-label="Filtros do Kanban" className="mt-5 rounded-xl border border-border bg-white p-3">

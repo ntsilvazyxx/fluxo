@@ -1,5 +1,33 @@
 # Decisões de implementação
 
+## 2026-11-14 — Fase 4C.12.1: classificação de erros nos probes
+
+- `mariadb@3.5.4` é dependência direta do backend para os probes de schema. A versão já estava instalada como dependência do adaptador Prisma; não foi instalada uma versão nova.
+- O adaptador Prisma/MariaDB pode encapsular uma tentativa de conexão bloqueada pelo schema como `P2010` com `DriverAdapterError` interno `45028` (`ER_GET_CONNECTION_TIMEOUT` do pool). Esse código não prova erro 1044 e continua sendo rejeitado pelo guard.
+- Os probes abrem uma conexão individual com o driver MariaDB usando os mesmos parâmetros/credenciais validados pela URL e executam somente `SELECT DATABASE()`. Somente `errno`/`originalCode` 1044 é aceito como negação; 1049, autenticação, rede, timeout e qualquer erro desconhecido bloqueiam.
+- A camada Prisma, os checksums, o histórico de seis migrações e a validação de grants permanecem inalterados. O histórico real ausente no `_2` impede a aprovação do guard completo antes das migrações; um harness de leitura pode alcançar somente a etapa de probes, sem representar aprovação de campanha.
+- Os probes reais das duas contas restritas retornaram 1044 para os schemas proibidos e permitiram somente `_2`. A revalidação de checksums encontrou divergência em `seaf_gestao_dev` contra o baseline de 4C.10.3; a origem não foi determinada, e nenhum banco foi escrito nesta fase. Não declarar prontidão de migração até investigar a divergência.
+
+## 2026-11-14 — Fase 4C.10 interrompida antes das migrações
+
+- MariaDB XAMPP estava parado; foi iniciado normalmente com configuração existente, sem reinstalação/alteração de senha/configuração. Confirmados 10.11.16 e 127.0.0.1:3306.
+- Criados somente o banco vazio `seaf_gestao_integration_2` (utf8mb4/utf8mb4_unicode_ci) e as contas seaf_it2_migrate/seaf_it2_run em 127.0.0.1, com credenciais cifradas localmente por DPAPI/ACL. O script local aplicou escape excessivo nos underscores dos grants, resultando em 1044 ao selecionar o próprio schema. Operações interrompidas; nenhum migrate deploy/status ou fixture foi executado. Banco novo permanece com zero tabelas e zero migrações.
+- Diagnóstico de leitura também confirmou acesso das contas novas ao schema test e linhas preexistentes em mysql.db para User vazio/Host % nos scopes test e test\_%. Não se pode certificar exclusividade efetiva apenas por SHOW GRANTS das contas nomeadas. Nenhum grant preexistente ou código do guard foi alterado para resolver isso; é necessária intervenção administrativa específica autorizada.
+- Quatro bancos protegidos (incluindo primeira campanha), `.env` e bdseaf.sql com contagens/hashes idênticos antes/depois. Sem limpeza/recriação, commit ou push. Estado e plano de correção em PHASE-4C10-PROVISIONING.md. Não repetir o provisionamento como se `_2` ainda não existisse e não iniciar campanha.
+
+## 2026-11-14 — Fase 4C.9: seleção explícita e preservação da primeira campanha
+
+- Guard reconhece por igualdade exata somente integration e integration_2, com INTEGRATION_DATABASE_NAME obrigatório, URLs idênticas, destino efetivo, migrações/checksums e grants do schema selecionado. Runner e contexto bloqueiam escrita/reutilização do banco original; somente `_2` é destino de execução futura. Clientes validados são vinculados ao destino por WeakMap. Não há default para o banco antigo.
+- Grants devem indicar schema literal com underscores escapados; contas com acesso às duas campanhas são recusadas. O novo banco/contas não foram criados e nenhum banco foi acessado nesta fase. Os preflights com nome fixo em três suítes foram parametrizados, sem alterar asserções de RBAC ou regras funcionais.
+- Guard ampliado de 36 para 60 testes, todos sem banco real. A revisão mantém 108 cenários de integração e registra cobertura parcial, lacunas e alternativas de ADMIN MASTER em PHASE-4C9-PREPARATION.md. Nenhuma permissão ou esperado 403 foi alterado. Provisionamento e campanha dependem de autorizações distintas; não reutilizar scripts locais antigos que apontam para a primeira campanha.
+
+## 2026-11-14 — Fase 4C.8: métricas por política e correção de fixtures
+
+- O detalhe passa a política de cada ciclo ao cálculo de métricas, usando um único instante de observação na resposta. RUNNING_CLOCK conta tempo corrido de responsabilidade menos a união das pausas intersectadas com a atribuição; espera continua separada. LEGACY_CALENDAR mantém o cálculo de expediente da versão histórica, sem fallback baseado em calendário nulo. Leitura não modifica prazos ou dados. A correção foi reproduzida e testada com unidade, serviço e HTTP/Prisma simulado, sem banco real.
+- Testes de anexos usam o prefixo já existente `/task-uploads`, comprovado pelo router e frontend; não foi criada rota alternativa. Factories históricas recebem openedAt explícito e cronologia válida por builder puro; task/currentCycleId continuam transacionais e o guard continua obrigatório. Schema e constraints não foram alterados.
+- Documentos de RBAC permanecem conflitantes com a decisão posterior de administração global: nenhuma permissão, expectativa 403 ou skip foi alterado. A política ADMIN MASTER exige consolidação expressa; as duas falhas anteriores não foram declaradas corrigidas.
+- 19 regressões novas, 132 testes backend e 13 frontend aprovados. Nenhuma campanha real, migração, alteração de banco ou `.env`, commit ou push. Impacto esperado e riscos estáticos adicionais registrados em PHASE-4C8-VALIDATION.md; não projetar aprovações MariaDB sem nova execução autorizada.
+
 ## 2026-11-13 — Fase 4C.6: provisionamento autorizado da integração
 
 - Criado exclusivamente `seaf_gestao_integration` vazio, utf8mb4/utf8mb4_unicode_ci, no MariaDB 10.11.16 em 127.0.0.1:3306. As seis migrações existentes foram aplicadas por Prisma Migrate Deploy; status/checksums e estruturas conferidos. Nenhum dump foi importado e nenhum seed/fixture foi executado.

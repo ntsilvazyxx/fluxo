@@ -1,3 +1,4 @@
+import { featureFlags } from '../../config/features.js';
 import {
   clearRefreshCookieOptions,
   REFRESH_COOKIE_NAME,
@@ -17,6 +18,7 @@ const sendSession = (response, session, config) => {
       accessToken: session.accessToken,
       expiresIn: session.expiresIn,
       user: session.user,
+      features: featureFlags(config),
     },
   });
 };
@@ -41,7 +43,7 @@ export const createAuthController = ({ service, config }) => ({
   },
 
   me: async (request, response) => {
-    response.status(200).json({ data: { user: presentUser(request.auth.user) } });
+    response.status(200).json({ data: { user: presentUser(request.auth.user), features: featureFlags(config) } });
   },
 
   forgotPassword: async (request, response) => {

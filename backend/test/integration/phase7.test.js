@@ -5,7 +5,7 @@ import request from 'supertest';
 
 import { createIntegrationApp as createApp } from '../../testing/integration/context.js';
 import { createIntegrationPrisma as createPrismaClient } from '../../testing/integration/context.js';
-import { parseIntegrationTarget as parseDatabaseUrl } from '../../testing/integration/context.js';
+import { integrationDatabaseName, parseIntegrationTarget as parseDatabaseUrl } from '../../testing/integration/context.js';
 import { hashPassword } from '../../src/shared/security/password.js';
 import { createEmailSender } from '../../src/modules/outbox/outbox.sender.js';
 import { createOutboxService } from '../../src/modules/outbox/outbox.service.js';
@@ -107,7 +107,7 @@ suite('Fase 7 - notificações, outbox e e-mails no MariaDB real', () => {
   before(async () => {
     assert.ok(process.env.TEST_DATABASE_URL, 'TEST_DATABASE_URL é obrigatória para integração.');
     const { database } = parseDatabaseUrl(process.env.TEST_DATABASE_URL);
-    assert.equal(database, 'seaf_gestao_integration');
+    assert.equal(database, integrationDatabaseName());
 
     prisma = await createPrismaClient(process.env.TEST_DATABASE_URL, { connectionLimit: 20 });
 

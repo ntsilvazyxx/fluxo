@@ -1,7 +1,9 @@
 import { Router } from 'express';
+import { canAdminCreateTask } from '../../config/features.js';
 import { authenticate } from '../../middlewares/authenticate.js';
 import { requireRoles } from '../../middlewares/authorize.js';
 import { validate } from '../../middlewares/validate.js';
+import { AppError } from '../../shared/errors/app-error.js';
 import { asyncHandler } from '../../shared/http/async-handler.js';
 import { createAttachmentStorage } from '../attachments/attachment.storage.js';
 import { createAttachmentService } from '../attachments/attachment.service.js';
@@ -10,11 +12,18 @@ import { createTaskService } from './task.service.js';
 import { assignTaskSchema, assignmentActionSchema, cancelTaskSchema, completeTaskSchema, createTaskSchema, listTasksSchema, rejectAssignmentSchema, restartTaskSchema, taskIdSchema, updateTaskSchema } from './task.schemas.js';
 
 const authenticated = (router, prisma, config) => router.use(authenticate({ prisma, config }));
+const adminTaskCreation = (config) => (request, _response, next) => {
+  if (request.auth?.roleCode === 'ADMIN_MASTER' && !canAdminCreateTask(config)) {
+    next(new AppError(403, 'ADMIN_TASK_CREATION_DISABLED', 'A criação de tarefas pelo ADMIN MASTER está desabilitada neste ambiente.'));
+    return;
+  }
+  next();
+};
 export const createTaskRouter = ({ prisma, config }) => {
   const attachmentService=createAttachmentService({prisma,storage:createAttachmentStorage(config.attachmentStoragePath??config.imageStoragePath),ttlMinutes:config.attachmentStagingTtlMinutes});
   const router=Router(),controller=createTaskController({service:createTaskService({prisma,attachmentService})});authenticated(router,prisma,config);
   router.get('/',validate(listTasksSchema),asyncHandler(controller.list));
-  router.post('/',requireRoles('ADMIN_MASTER','SECRETARY','MANAGER'),validate(createTaskSchema),asyncHandler(controller.create));
+  router.post('/',requireRoles('ADMIN_MASTER','SECRETARY','MANAGER'),adminTaskCreation(config),validate(createTaskSchema),asyncHandler(controller.create));
   router.get('/:id',validate(taskIdSchema),asyncHandler(controller.detail));
   router.patch('/:id',requireRoles('ADMIN_MASTER','SECRETARY','MANAGER'),validate(updateTaskSchema),asyncHandler(controller.update));
   router.post('/:id/assignments',requireRoles('ADMIN_MASTER','SECRETARY','MANAGER'),validate(assignTaskSchema),asyncHandler(controller.assign));

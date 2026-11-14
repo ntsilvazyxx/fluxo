@@ -40,7 +40,41 @@ export function calculateWorkingMilliseconds({ startAt, endAt, calendarVersion, 
   return total;
 }
 
-export function calculateAssignmentMetrics(assignment, now = new Date()) {
+function timestamp(value, field) {
+  if (!(value instanceof Date) && !['string', 'number'].includes(typeof value)) throw new TypeError(`Data inválida: ${field}.`);
+  const date = value instanceof Date ? value : new Date(value);
+  if (value == null || !Number.isFinite(date.getTime())) throw new TypeError(`Data inválida: ${field}.`);
+  return date.getTime();
+}
+
+function runningClockMetrics(assignment, now) {
+  const assignedAt = timestamp(assignment.assignedAt, 'assignedAt');
+  const end = timestamp(assignment.endedAt ?? now, 'endedAt/now');
+  const acceptedAt = assignment.acceptedAt == null ? null : timestamp(assignment.acceptedAt, 'acceptedAt');
+  const waitingMilliseconds = Math.max(0, (acceptedAt ?? end) - assignedAt);
+  if (acceptedAt === null) return { waitingMilliseconds, responsibilityMilliseconds: 0, pausedMilliseconds: 0, effectiveWorkingMilliseconds: 0 };
+
+  const responsibilityMilliseconds = Math.max(0, end - acceptedAt);
+  // Intersect the union of pauses with this assignment's responsibility window.
+  // An open pause ends at the observation/assignment end, never at a deadline.
+  const intervals = (assignment.pauseIntervals ?? []).map((pause) => {
+    const start = timestamp(pause.startedAt, 'pause.startedAt');
+    const finish = pause.endedAt == null ? end : timestamp(pause.endedAt, 'pause.endedAt');
+    if (pause.endedAt != null && finish < start) throw new TypeError('Intervalo de pausa inválido.');
+    return [Math.max(acceptedAt, start), Math.min(end, finish)];
+  }).filter(([start, finish]) => finish > start).sort((a, b) => a[0] - b[0]);
+  let pausedMilliseconds = 0;
+  let previousEnd = acceptedAt;
+  for (const [start, finish] of intervals) {
+    pausedMilliseconds += Math.max(0, finish - Math.max(start, previousEnd));
+    previousEnd = Math.max(previousEnd, finish);
+  }
+  return { waitingMilliseconds, responsibilityMilliseconds, pausedMilliseconds, effectiveWorkingMilliseconds: responsibilityMilliseconds - pausedMilliseconds };
+}
+
+export function calculateAssignmentMetrics(assignment, now = new Date(), { deadlinePolicy = 'LEGACY_CALENDAR' } = {}) {
+  if (deadlinePolicy === 'RUNNING_CLOCK') return runningClockMetrics(assignment, now);
+  if (deadlinePolicy !== 'LEGACY_CALENDAR') throw new TypeError('Política de prazo inválida.');
   const assignmentEnd = assignment.endedAt ?? now;
   const waitingEnd = assignment.acceptedAt ?? assignmentEnd;
   const waitingMilliseconds = Math.max(0, waitingEnd - assignment.assignedAt);

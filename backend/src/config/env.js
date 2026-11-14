@@ -72,6 +72,7 @@ export const env = Object.freeze({
     10,
   ),
   cookieSecure: process.env.COOKIE_SECURE === '1',
+  adminTaskCreationEnabled: process.env.ADMIN_TASK_CREATION_ENABLED === '1',
   imageStoragePath:
     process.env.IMAGE_STORAGE_PATH ??
     fileURLToPath(new URL('../../storage/images', import.meta.url)),

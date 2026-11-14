@@ -1,5 +1,17 @@
 # Continuar o SEAF em outro computador
 
+## Bloqueio atual — Fase 4C.10 (2026-11-14)
+
+`seaf_gestao_integration_2` **já foi criado e está vazio, com zero tabelas/migrações**. Foram criadas as contas seaf_it2_migrate/seaf_it2_run, mas o provisionamento foi interrompido por erro 1044 decorrente do escape excessivo no GRANT e por acesso preexistente a test/test\_% que impede certificar exclusividade. Não recriar, limpar ou repetir automaticamente os scripts locais. Nenhuma migração ou campanha foi executada. Os quatro bancos protegidos e `.env` foram preservados. Consulte [PHASE-4C10-PROVISIONING.md](PHASE-4C10-PROVISIONING.md) para evidências e a intervenção de permissões que precisa de nova autorização. Credenciais permanecem cifradas localmente fora do Git. Alterações locais continuam sem commit/push.
+
+## Preparação local — Fase 4C.9 (2026-11-14)
+
+A primeira campanha em `seaf_gestao_integration` é evidência preservada e não pode ser reutilizada. O guard exige `INTEGRATION_DATABASE_NAME` explícito: reconhece os dois nomes exatos, mas runner/factories só permitem a futura campanha em `seaf_gestao_integration_2`. O novo banco não foi provisionado nem consultado nesta etapa. Não reutilizar contas/scripts locais antigos ou executar comandos de integração automaticamente. O plano, os testes de segurança e as alternativas da política ADMIN MASTER estão em [PHASE-4C9-PREPARATION.md](PHASE-4C9-PREPARATION.md). Alterações de 4C.8/4C.9 permanecem locais, sem commit/push; aguardar autorização para provisionamento e, separadamente, campanha.
+
+## Checkpoint local — Fase 4C.8 (2026-11-14)
+
+Correções de prefixos dos testes, openedAt das factories e métricas RUNNING_CLOCK por ciclo implementadas localmente. Resultado sem banco: **132 testes backend (incluindo 36 do guard) e 13 frontend aprovados**; lint, typecheck, build e Prisma Validate aprovados. Nenhum banco ou `.env` foi alterado e nenhuma nova integração foi executada. ADMIN MASTER permanece com divergência documental não resolvida. Consulte [PHASE-4C8-VALIDATION.md](PHASE-4C8-VALIDATION.md) para alterações, riscos e plano da segunda campanha. Estas alterações ainda não foram commitadas nem enviadas nesta etapa; aguardar autorização para correções adicionais, integração com escrita, commit ou push. Os últimos resultados MariaDB continuam os 71/31/6 da Fase 4C.7 abaixo.
+
 ## Checkpoint de continuidade — Fase 4C.7
 
 - Branch: `feature/kanban-refactor`. As alterações das Fases 4C.5–4C.7 acompanham este guia.
