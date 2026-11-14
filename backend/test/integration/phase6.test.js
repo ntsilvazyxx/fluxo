@@ -6,8 +6,8 @@ import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import request from 'supertest';
 
-import { createApp } from '../../src/app.js';
-import { createPrismaClient } from '../../src/infrastructure/database/prisma.js';
+import { createIntegrationApp as createApp } from '../../testing/integration/context.js';
+import { createIntegrationPrisma as createPrismaClient } from '../../testing/integration/context.js';
 import { createFileImageStorage } from '../../src/modules/images/image.storage.js';
 import { hashPassword } from '../../src/shared/security/password.js';
 
@@ -61,21 +61,13 @@ suite('Fase 6 - imagens protegidas no MariaDB real', () => {
       .set('authorization', `Bearer ${managerToken}`)
       .set('idempotency-key', randomUUID())
       .send({
-        teamId: team.id,
+        teamId: team.id, userId: technician.id, acceptanceDurationMinutes:60, executionDurationMinutes:1440,
         title: `EvidÃªncia ${randomUUID()}`,
         description: 'Tarefa preparada para os testes de imagens protegidas',
         priority: 'NORMAL',
       });
     assert.equal(created.status, 201, JSON.stringify(created.body));
-    const assigned = await request(app)
-      .post(`/api/v1/tasks/${created.body.data.task.id}/assignments`)
-      .set('authorization', `Bearer ${managerToken}`)
-      .set('idempotency-key', randomUUID())
-      .send({
-        userId: technician.id,
-        deadlineAt: new Date(Date.now() + 86_400_000).toISOString(),
-        expectedVersion: created.body.data.task.cycle.version,
-      });
+    const assigned = created;
     const accepted = await request(app)
       .post(`/api/v1/assignments/${assigned.body.data.task.cycle.assignment.id}/accept`)
       .set('authorization', `Bearer ${technicianToken}`)
@@ -92,7 +84,7 @@ suite('Fase 6 - imagens protegidas no MariaDB real', () => {
     .attach('image', file, { filename, contentType: 'application/octet-stream' });
 
   before(async () => {
-    prisma = createPrismaClient(process.env.TEST_DATABASE_URL, { connectionLimit: 20 });
+    prisma = await createPrismaClient(process.env.TEST_DATABASE_URL, { connectionLimit: 20 });
     storageRoot = await mkdtemp(path.join(os.tmpdir(), 'seaf-images-integration-'));
     storage = createFileImageStorage(storageRoot);
     app = createApp({ prisma, config, imageStorage: storage, passwordResetNotifier: async () => {} });
@@ -115,8 +107,12 @@ suite('Fase 6 - imagens protegidas no MariaDB real', () => {
   });
 
   after(async () => {
-    await prisma.$disconnect();
-    await rm(storageRoot, { recursive: true, force: true });
+    await prisma?.$disconnect();
+    if (storageRoot) {
+      assert.equal(path.dirname(path.resolve(storageRoot)), path.resolve(os.tmpdir()));
+      assert.ok(path.basename(storageRoot).startsWith('seaf-images-integration-'));
+      await rm(storageRoot, { recursive: true, force: true });
+    }
   });
 
   it('envia, lista e recupera imagem vÃ¡lida sem expor a chave fÃ­sica', async () => {

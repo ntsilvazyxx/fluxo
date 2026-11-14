@@ -1,9 +1,10 @@
+import { factories } from '../../testing/integration/fixtures.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import request from 'supertest';
-import { createApp } from '../../src/app.js';
-import { createPrismaClient } from '../../src/infrastructure/database/prisma.js';
+import { createIntegrationApp as createApp } from '../../testing/integration/context.js';
+import { createIntegrationPrisma as createPrismaClient } from '../../testing/integration/context.js';
 import { hashPassword } from '../../src/shared/security/password.js';
 
 const suite = process.env.RUN_DATABASE_INTEGRATION === '1' ? describe : describe.skip;
@@ -32,15 +33,10 @@ suite('subtarefas, ciclos, reabertura e restauração no MariaDB real', () => {
     return response.body.data.task;
   };
   const createMain = async ({ start = false } = {}) => {
-    const created = await request(app).post('/api/v1/tasks').set(headers(managerToken)).send({
-      teamId: team.id, title: `Tarefa principal ${randomUUID()}`,
-      description: 'Tarefa principal para validação dos ciclos de execução', priority: 'HIGH',
-    });
-    assert.equal(created.status, 201, JSON.stringify(created.body));
-    let task = created.body.data.task;
+    let task = await factories(prisma).legacyTask({ teamId: team.id, authorId: manager.id, title: `Histórico ${randomUUID()}`, priority: 'HIGH', deadlineAt: new Date(Date.now() + 4 * 86400000) });
     if (!start) return task;
     const assigned = await request(app).post(`/api/v1/tasks/${task.id}/assignments`).set(headers(managerToken)).send({
-      userId: technician.id, deadlineAt: new Date(Date.now() + 4 * 86_400_000).toISOString(), expectedVersion: task.cycle.version,
+      userId: technician.id, acceptanceDurationMinutes:60, executionDurationMinutes:1440, expectedVersion: task.cycle.version,
     });
     assert.equal(assigned.status, 200, JSON.stringify(assigned.body));
     task = assigned.body.data.task;
@@ -56,7 +52,7 @@ suite('subtarefas, ciclos, reabertura e restauração no MariaDB real', () => {
     });
 
   before(async () => {
-    prisma = createPrismaClient(process.env.TEST_DATABASE_URL, { connectionLimit: 20 });
+    prisma = await createPrismaClient(process.env.TEST_DATABASE_URL, { connectionLimit: 20 });
     roles = Object.fromEntries((await prisma.role.findMany()).map((role) => [role.code, role]));
     [manager, outsider, technician] = await Promise.all([
       makeUser('MANAGER', 'Gestor Subtarefas'), makeUser('MANAGER', 'Gestor Externo Fase 5'), makeUser('TECHNICIAN', 'Técnico Subtarefas'),

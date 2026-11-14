@@ -118,15 +118,18 @@ Nunca use `prisma db push` como substituto das migrações. Os scripts não exec
 
 ### Testes MariaDB reais
 
-Use exclusivamente `seaf_gestao_test`, com as migrações e o seed já aplicados, e então habilite explicitamente a suíte:
+Desde a Fase 4C.5, `test:integration` aceita exclusivamente `seaf_gestao_integration`, em `127.0.0.1:3306`. Os bancos `seaf_gestao_dev`, `seaf_gestao_test` e `seaf_gestao_recovery` estão protegidos e são recusados. A preparação do banco e a execução da campanha exigem autorização separada; consulte [PHASE-4C5-VALIDATION.md](docs/PHASE-4C5-VALIDATION.md).
+
+Somente depois de provisionar as seis migrações e uma conta limitada a SELECT/INSERT/UPDATE/DELETE nesse banco, configure as duas URLs **no processo**, sem alterar `.env`. O exemplo abaixo usa valores fictícios e não deve ser executado antes dessa autorização:
 
 ```powershell
 $env:RUN_DATABASE_INTEGRATION='1'
-$env:TEST_DATABASE_URL='mysql://usuario:senha@127.0.0.1:3306/seaf_gestao_test'
-npm run test:integration
+$env:DATABASE_URL='mysql://conta_integration:senha_ficticia@127.0.0.1:3306/seaf_gestao_integration'
+$env:TEST_DATABASE_URL=$env:DATABASE_URL
+npm.cmd run test:integration
 ```
 
-A suíte exige MariaDB 10.11.x. O comando dedicado `test:integration` recusa flag ausente ou banco diferente de `seaf_gestao_test`. Em `npm test`, sem a flag ativa, as suítes de banco aparecem como ignoradas, nunca como aprovadas.
+A suíte exige MariaDB 10.11.x, destino efetivo confirmado por SQL de leitura, histórico/checksums das seis migrações e privilégios restritos. Contas administrativas globais são recusadas. O contexto cria somente os quatro perfis sintéticos necessários, após o guard; não executa o seed administrativo de produção. As integrações não executadas não contam como aprovadas. Mantenha `RUN_DATABASE_INTEGRATION=0` nas validações sem banco. Os comandos de E2E/carga da seção anterior não fazem parte desta campanha isolada e não devem ser executados nos bancos preservados.
 
 ## Scripts principais
 
@@ -202,7 +205,7 @@ Cada equipe possui um calendário versionado com timezone IANA, períodos semana
 
 Principais rotas: `/api/v1/tasks/:id/requests`, `/api/v1/requests/:id/approve`, `/api/v1/requests/:id/deny`, `/api/v1/calendars`, `/api/v1/calendars/:id`, `/api/v1/calendars/:id/versions` e `/api/v1/calendars/:id/versions/:versionId/publish`.
 
-Os testes automatizados com banco devem continuar usando exclusivamente `seaf_gestao_test`. A migração da Fase 4 é aplicada com `npm run db:migrate:deploy`; nunca use `prisma db push` ou `prisma migrate reset`.
+As validações históricas desta fase utilizaram `seaf_gestao_test`. Na continuidade da nova máquina (Fase 4C.5), esse banco deve ser preservado; novas integrações com escrita usarão exclusivamente `seaf_gestao_integration`, após autorização de provisionamento e campanha. Nunca use `prisma db push` ou `prisma migrate reset`.
 
 ## Fase 5 — Subtarefas e ciclos de execução
 

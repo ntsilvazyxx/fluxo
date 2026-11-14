@@ -2,26 +2,30 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { before, after, describe, it } from 'node:test';
 import request from 'supertest';
-import { createApp } from '../../src/app.js';
-import { fixtures } from '../../../quality/fixtures.js';
+import { createIntegrationApp as createApp } from '../../testing/integration/context.js';
+import { fixtures, factories, runningTaskInput } from '../../testing/integration/fixtures.js';
 import { createOutboxService } from '../../src/modules/outbox/outbox.service.js';
-import { testDatabase } from '../../../quality/test-database.js';
+import { testDatabase } from '../../testing/integration/context.js';
 
 describe('Kanban unificado - escopo pessoal e filtros no MariaDB', { skip: process.env.RUN_DATABASE_INTEGRATION !== '1' }, () => {
   let prisma; let app; let data; let foreign; const tokens = {}; const tasks = {};
   const call = (role, method, path, body) => request(app)[method](`/api/v1${path}`).set('authorization', `Bearer ${tokens[role]}`).set('idempotency-key', randomUUID()).send(body);
   async function create(role, teamId, title, assignee, priority = 'NORMAL', overdue = false) {
     const reason = 'Preparação isolada do Kanban para homologação';
-    let result = await call(role, 'post', '/tasks', { teamId, title: `${title} ${data.run}`, description: 'Cenário real de escopo e filtros', priority, reason });
-    assert.equal(result.status, 201); let task = result.body.data.task;
-    if (assignee) {
-      result = await call(role, 'post', `/tasks/${task.id}/assignments`, { userId: assignee.id, expectedVersion: task.cycle.version, deadlineAt: overdue ? '2020-01-01T12:00:00Z' : '2027-01-05T12:00:00Z', reason });
-      assert.equal(result.status, 200); task = result.body.data.task;
+    if (!assignee) return factories(prisma).legacyTask({ teamId, authorId: data.users[role].id, title: title + ' ' + data.run, priority });
+    const result = await call(role, 'post', '/tasks', runningTaskInput(teamId, assignee.id, { title: title + ' ' + data.run, priority, reason }));
+    assert.equal(result.status, 201, JSON.stringify(result.body));
+    let task = result.body.data.task;
+    if (overdue) {
+      const past = new Date('2020-01-01T12:00:00Z');
+      await prisma.taskCycle.update({ where: { id: task.cycle.id }, data: { acceptanceDeadlineAt: past } });
+      await prisma.taskAssignment.update({ where: { id: task.cycle.assignment.id }, data: { acceptanceDeadlineAt: past } });
+      task = (await call(role, 'get', '/tasks/' + task.id)).body.data.task;
     }
     return task;
   }
   before(async () => {
-    ({ prisma } = testDatabase()); data = await fixtures(prisma); foreign = await fixtures(prisma);
+    ({ prisma } = await testDatabase()); data = await fixtures(prisma); foreign = await fixtures(prisma);
     app = createApp({ prisma, config: { loginMaxAttempts: 1000 } });
     for (const role of ['secretary', 'manager', 'technician', 'admin']) {
       const response = await request(app).post('/api/v1/auth/login').send({ email: data.users[role].emailNormalized, password: data.password });
@@ -77,7 +81,7 @@ describe('Kanban unificado - escopo pessoal e filtros no MariaDB', { skip: proce
   });
   it('rejeição/reatribuição não permitem recuperar tarefa alheia por filtros ou IDOR', async () => {
     let task = await create('manager', data.team.id, 'Reatribuição', data.users.technician);
-    const response = await call('manager', 'post', `/tasks/${task.id}/assignments`, { userId: data.users.manager.id, expectedVersion: task.cycle.version, deadlineAt: '2027-01-05T12:00:00Z', reason: 'Reatribuição para verificar escopo atual' });
+    const response = await call('manager', 'post', `/tasks/${task.id}/assignments`, { userId: data.users.manager.id, expectedVersion: task.cycle.version, acceptanceDurationMinutes:60, executionDurationMinutes:1440, reason: 'Reatribuição para verificar escopo atual' });
     assert.equal(response.status, 200); task = response.body.data.task;
     assert.equal((await call('technician', 'get', `/tasks?search=${task.publicNumber}&responsibleId=${data.users.technician.id}`)).body.meta.total, 0);
     assert.equal((await call('technician', 'get', `/my-tasks?search=${task.publicNumber}&responsibleId=${data.users.manager.id}`)).body.meta.total, 0);

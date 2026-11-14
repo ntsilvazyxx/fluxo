@@ -3,8 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import request from 'supertest';
 
-import { createApp } from '../../src/app.js';
-import { createPrismaClient, parseDatabaseUrl } from '../../src/infrastructure/database/prisma.js';
+import { createIntegrationApp as createApp } from '../../testing/integration/context.js';
+import { createIntegrationPrisma as createPrismaClient } from '../../testing/integration/context.js';
+import { parseIntegrationTarget as parseDatabaseUrl } from '../../testing/integration/context.js';
 import { createDashboardService } from '../../src/modules/dashboard/dashboard.service.js';
 import { hashPassword } from '../../src/shared/security/password.js';
 
@@ -22,8 +23,8 @@ suite('Fase 8 - autorização de indicadores no MariaDB real', () => {
   const token = async (user) => (await request(app).post('/api/v1/auth/login').send({ email: user.emailNormalized, password })).body.data.accessToken;
 
   before(async () => {
-    assert.equal(parseDatabaseUrl(process.env.TEST_DATABASE_URL).database, 'seaf_gestao_test');
-    prisma = createPrismaClient(process.env.TEST_DATABASE_URL, { connectionLimit: 12 });
+    assert.equal(parseDatabaseUrl(process.env.TEST_DATABASE_URL).database, 'seaf_gestao_integration');
+    prisma = await createPrismaClient(process.env.TEST_DATABASE_URL, { connectionLimit: 12 });
     app = createApp({ prisma, startOutboxWorker: false });
     users = { secretary: await createUser('SECRETARY'), manager: await createUser('MANAGER'), technician: await createUser('TECHNICIAN'), admin: await createUser('ADMIN_MASTER') };
   });

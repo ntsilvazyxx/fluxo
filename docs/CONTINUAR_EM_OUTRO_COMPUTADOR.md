@@ -1,5 +1,16 @@
 # Continuar o SEAF em outro computador
 
+## Checkpoint de continuidade — Fase 4C.7
+
+- Branch: `feature/kanban-refactor`. As alterações das Fases 4C.5–4C.7 acompanham este guia.
+- Na máquina atual, `seaf_gestao_integration` foi provisionado e recebeu uma única campanha: **71 aprovados, 31 reprovados, 6 cancelados e 0 ignorados**, entre 108 cenários registrados. Não repetir automaticamente.
+- Bancos `dev`, `test` e `recovery` preservados. Desenvolvimento **não está apto para atualização**. Nenhuma correção das falhas foi autorizada ou aplicada.
+- Próximo trabalho, após autorização: corrigir prefixo dos testes de anexos, openedAt das factories, métricas RUNNING_CLOCK sem calendário e consolidar a política ADMIN MASTER. Reabertura e compatibilidade histórica ainda têm lacunas. Consultar [PHASE-4C7-VALIDATION.md](PHASE-4C7-VALIDATION.md) para falhas individuais, evidências e plano.
+- Código e relatórios estão no Git. Bancos, `.env`, dumps, logs e credenciais não são distribuídos pelo repositório. Na máquina atual, as evidências privadas e os ponteiros das fases estão em `.artifacts/`. As credenciais do banco estão cifradas por Windows DPAPI e dependem do usuário Windows original; não presumir que serão utilizáveis em outro computador.
+- Em outra máquina, o clone não recria bancos nem credenciais. Qualquer provisionamento, transferência privada, correção ou nova campanha depende de autorização específica. Não usar bdseaf.sql, não executar migrações ou testes com escrita automaticamente.
+
+> Atualização Fase 4C.5 (nova máquina): as instruções históricas abaixo não autorizam escrita em `seaf_gestao_test`. Preserve `dev`, `test` e `recovery`. O runner de integração agora exige exclusivamente `seaf_gestao_integration`, seis migrações e conta restrita a esse banco. Não restaure dumps para a campanha sintética. O provisionamento e a execução real ainda dependem de autorização. Consulte [PHASE-4C5-VALIDATION.md](PHASE-4C5-VALIDATION.md).
+
 ## Repositório e branch
 
 - Repositório: `https://github.com/ntsilvazyxx/fluxo.git`
@@ -68,6 +79,6 @@ Valide o Kanban autenticando-se com uma conta local autorizada e conferindo:
 
 ## Próxima etapa: Fase 4C.1
 
-Isolar os testes de integração antes de executá-los em `seaf_gestao_test`. A alternativa recomendada é limpar exclusivamente os fixtures identificados por UUID/prefixo próprio ao final de cada suíte, ou usar um banco descartável restaurado de backup. Depois, executar a homologação completa de RUNNING_CLOCK, anexos, RBAC, Kanban e compatibilidade `LEGACY_CALENDAR`.
+Provisionar, somente após autorização, `seaf_gestao_integration` vazio com seis migrações versionadas e conta restrita ao schema. A infraestrutura da Fase 4C.5 prepara fixtures sintéticas e recusa os bancos preservados. A campanha real de RUNNING_CLOCK, anexos, RBAC, Kanban e compatibilidade `LEGACY_CALENDAR` depende de uma autorização posterior; não limpar dados nem restaurar backups nos bancos existentes.
 
 Não aplicar as migrações em `seaf_gestao_dev` antes dessa homologação e de autorização específica.

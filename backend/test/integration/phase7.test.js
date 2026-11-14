@@ -3,8 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import request from 'supertest';
 
-import { createApp } from '../../src/app.js';
-import { createPrismaClient, parseDatabaseUrl } from '../../src/infrastructure/database/prisma.js';
+import { createIntegrationApp as createApp } from '../../testing/integration/context.js';
+import { createIntegrationPrisma as createPrismaClient } from '../../testing/integration/context.js';
+import { parseIntegrationTarget as parseDatabaseUrl } from '../../testing/integration/context.js';
 import { hashPassword } from '../../src/shared/security/password.js';
 import { createEmailSender } from '../../src/modules/outbox/outbox.sender.js';
 import { createOutboxService } from '../../src/modules/outbox/outbox.service.js';
@@ -106,9 +107,9 @@ suite('Fase 7 - notificações, outbox e e-mails no MariaDB real', () => {
   before(async () => {
     assert.ok(process.env.TEST_DATABASE_URL, 'TEST_DATABASE_URL é obrigatória para integração.');
     const { database } = parseDatabaseUrl(process.env.TEST_DATABASE_URL);
-    assert.match(database, /test/i, 'Os testes só podem usar banco cujo nome contenha "test".');
+    assert.equal(database, 'seaf_gestao_integration');
 
-    prisma = createPrismaClient(process.env.TEST_DATABASE_URL, { connectionLimit: 20 });
+    prisma = await createPrismaClient(process.env.TEST_DATABASE_URL, { connectionLimit: 20 });
 
     config = {
       corsOrigins: ['http://localhost:5173'],
@@ -575,13 +576,11 @@ suite('Fase 7 - notificações, outbox e e-mails no MariaDB real', () => {
 
   it('adaptador SMTP registra falha quando indisponível', async () => {
     const failingSender = createEmailSender({
+      transport: { async sendMail() { throw new Error('Falha SMTP simulada, sem rede'); } },
       config: {
         ...config,
         mailEnabled: true,
-        mailHost: '127.0.0.1',
-        mailPort: 1,
-        mailUser: '',
-        mailPass: '',
+
       },
     });
 

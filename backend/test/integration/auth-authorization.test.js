@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import request from 'supertest';
-import { createApp } from '../../src/app.js';
-import { createPrismaClient } from '../../src/infrastructure/database/prisma.js';
+import { createIntegrationApp as createApp } from '../../testing/integration/context.js';
+import { createIntegrationPrisma as createPrismaClient } from '../../testing/integration/context.js';
 import { hashPassword } from '../../src/shared/security/password.js';
 
 const enabled = process.env.RUN_DATABASE_INTEGRATION === '1';
@@ -18,7 +18,7 @@ suite('autenticação e autorização no MariaDB real', () => {
   const bearer = async (user) => `Bearer ${(await login(user)).body.data.accessToken}`;
 
   before(async () => {
-    prisma = createPrismaClient(process.env.TEST_DATABASE_URL, { connectionLimit: 12 });
+    prisma = await createPrismaClient(process.env.TEST_DATABASE_URL, { connectionLimit: 12 });
     const roleRows = await prisma.role.findMany(); roles = Object.fromEntries(roleRows.map((r) => [r.code, r]));
     assert.equal(Object.keys(roles).length, 4, 'O seed dos quatro perfis deve existir no banco de testes.');
     [admin, manager, technician, other] = await Promise.all([makeUser('ADMIN_MASTER','Admin Fase Dois'), makeUser('MANAGER','Gestor Fase Dois'), makeUser('TECHNICIAN','Tecnico Fase Dois'), makeUser('TECHNICIAN','Outro Tecnico')]);

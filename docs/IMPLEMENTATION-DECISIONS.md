@@ -1,5 +1,21 @@
 # Decisões de implementação
 
+## 2026-11-13 — Fase 4C.6: provisionamento autorizado da integração
+
+- Criado exclusivamente `seaf_gestao_integration` vazio, utf8mb4/utf8mb4_unicode_ci, no MariaDB 10.11.16 em 127.0.0.1:3306. As seis migrações existentes foram aplicadas por Prisma Migrate Deploy; status/checksums e estruturas conferidos. Nenhum dump foi importado e nenhum seed/fixture foi executado.
+- Contas distintas, limitadas ao schema literal e ao host 127.0.0.1: `seaf_it_migrate` para DDL/DML necessários e `seaf_it_run` apenas SELECT/INSERT/UPDATE/DELETE. Sem privilégios administrativos globais ou GRANT OPTION. Ambas tiveram SELECT recusado nos três bancos protegidos. Credenciais aleatórias cifradas localmente por Windows DPAPI e ACL do usuário; `.env` preservado. A conta de migração é DEFINER dos triggers e não deve ser descartada sem manutenção específica.
+- Guard do runner validado por chamadas somente de leitura, sem invocar o contexto que prepara roles ou iniciar a campanha. Banco com 31 tabelas e zero dados de aplicação; quatro perfis serão preparados futuramente pela suíte.
+- Contagens e hashes canônicos de dados/estruturas de dev, test e recovery iguais antes/depois. `.env` e bdseaf.sql também preservados. Sem commit/push. A autorização desta fase não abrange os 108 testes; pendências funcionais da Fase 4C.5 continuam abertas. Evidências e parecer em PHASE-4C6-VALIDATION.md.
+
+## 2026-11-13 — Fase 4C.5: integração descartável com guard obrigatório
+
+- A autorização atual substitui o destino histórico do runner por `seaf_gestao_integration`, exclusivamente em `127.0.0.1:3306`. `dev`, `test`, `recovery` e qualquer outro destino são recusados. Nenhum banco foi provisionado, migrado ou modificado nesta etapa.
+- Runner e cada conexão adicional verificam opt-in explícito, duas URLs idênticas, `SELECT DATABASE()`, versão/porta reais, exatamente seis migrações concluídas com os checksums do repositório e privilégios limitados a SELECT/INSERT/UPDATE/DELETE no schema descartável. Contas com DDL, privilégios globais ou acesso a outro schema são recusadas. A conta de migração será distinta da conta de execução.
+- Contexto exclusivo em `backend/testing/integration` substitui importações diretas dos clientes e da aplicação em todas as suítes. Perfis e dados são sintéticos, com UUID; nenhuma dependência de dumps ou da chave histórica. As quatro roles são preparadas por upsert sem alteração das roles existentes e somente após a validação da conexão. O seed administrativo não é executado.
+- SMTP é desabilitado nas aplicações dos testes; testes explícitos do adaptador usam transporte injetado local. Workers e servidor com jobs não são iniciados. Arquivos usam diretórios temporários próprios, removidos somente após conferir seus caminhos.
+- Cenários históricos PENDING são criados como fixtures LEGACY_CALENDAR; criação nova via HTTP exige responsável e durações, com atribuição atômica. As regras da aplicação não foram flexibilizadas. Novos testes mantêm asserções de sucesso que poderão revelar regressões na futura campanha.
+- Pendências registradas: cálculo de métricas com calendário nulo em RUNNING_CLOCK, política do ciclo reaberto e divergência dos testes antigos de ADMIN MASTER frente à decisão mais recente de acesso global. Não foram alteradas permissões ou corrigida produção nesta etapa de infraestrutura. Ver relatório específico para evidências e limites.
+
 ## 2026-11-13 — Consolidação do Kanban com TypeScript
 
 A base oficial de continuidade é `feature/kanban-refactor` (`5fa1487`), que contém as Fases 0 a 9 e a reformulação mais recente do Kanban. O frontend foi convertido nesta base de `.js/.jsx` para `.ts/.tsx`, sem substituir a lógica do quadro ou os contratos HTTP existentes. Vite, Vitest e ESLint foram configurados para TypeScript; `tsc --noEmit` integra build e o script `typecheck`. A checagem é efetiva, sem `noCheck`, enquanto `strict: false` permanece temporariamente para evolução incremental. O backend continua em JavaScript ESM.

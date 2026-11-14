@@ -1,15 +1,16 @@
+import { runningTaskInput } from '../../testing/integration/fixtures.js';
 import assert from 'node:assert/strict';
 import { before, after, describe, it } from 'node:test';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
-import { createApp } from '../../src/app.js';
-import { testDatabase, checkDatabase } from '../../../quality/test-database.js';
-import { fixtures } from '../../../quality/fixtures.js';
+import { createIntegrationApp as createApp } from '../../testing/integration/context.js';
+import { testDatabase, checkDatabase } from '../../testing/integration/context.js';
+import { fixtures } from '../../testing/integration/fixtures.js';
 
 describe('Fase 9 - ataques de entrada e autenticação no MariaDB real', { skip: process.env.RUN_DATABASE_INTEGRATION !== '1' }, () => {
   let prisma; let app; let data; let token;
   before(async () => {
-    ({ prisma } = testDatabase()); await checkDatabase(prisma); data = await fixtures(prisma);
+    ({ prisma } = await testDatabase()); await checkDatabase(prisma); data = await fixtures(prisma);
     app = createApp({ prisma, startOutboxWorker: false });
     const login = await request(app).post('/api/v1/auth/login').send({ email: data.users.manager.emailNormalized, password: data.password });
     assert.equal(login.status, 200); token = login.body.data.accessToken;
@@ -46,9 +47,8 @@ describe('Fase 9 - ataques de entrada e autenticação no MariaDB real', { skip:
       const call = async (method, path, body, accessToken = token, key = randomUUID()) => request(app)[method](`/api/v1${path}`).set('authorization', `Bearer ${accessToken}`).set('idempotency-key', key).send(body);
       const login = await request(app).post('/api/v1/auth/login').send({ email: data.users.technician.emailNormalized, password: data.password });
       assert.equal(login.status, 200); const techToken = login.body.data.accessToken;
-      const created = await call('post', '/tasks', { teamId: data.team.id, title: `Conclusão ${type}`, description: 'Regressão de conclusão e pedido pendente' });
+      const created = await call('post', '/tasks', runningTaskInput(data.team.id, data.users.technician.id, { title: `Conclusão ${type}` }));
       assert.equal(created.status, 201); const id = created.body.data.task.id;
-      assert.equal((await call('post', `/tasks/${id}/assignments`, { userId: data.users.technician.id, deadlineAt: '2027-01-05T12:00:00Z', expectedVersion: 0 })).status, 200);
       const task = (await call('get', `/tasks/${id}`)).body.data.task;
       assert.equal((await call('post', `/assignments/${task.cycle.assignment.id}/accept`, { expectedVersion: task.cycle.version }, techToken)).status, 200);
       const accepted = (await call('get', `/tasks/${id}`)).body.data.task;

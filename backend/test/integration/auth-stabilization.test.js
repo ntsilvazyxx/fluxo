@@ -5,21 +5,21 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import nodemailer from 'nodemailer';
 import request from 'supertest';
-import { env } from '../../src/config/env.js';
-import { createApp } from '../../src/app.js';
+import { integrationConfig } from '../../testing/integration/context.js';
+import { createIntegrationApp as createApp } from '../../testing/integration/context.js';
 import { createEmailSender } from '../../src/modules/outbox/outbox.sender.js';
 import { createOutboxService } from '../../src/modules/outbox/outbox.service.js';
 import { hashOpaqueToken } from '../../src/shared/security/tokens.js';
-import { fixtures } from '../../../quality/fixtures.js';
-import { testDatabase } from '../../../quality/test-database.js';
+import { fixtures } from '../../testing/integration/fixtures.js';
+import { testDatabase } from '../../testing/integration/context.js';
 
 describe('Fase 9 estabilização - recuperação com transporte local', { skip: process.env.RUN_DATABASE_INTEGRATION !== '1' }, () => {
   let prisma; let data; let app; let config; let session; const messages = [];
   const login = (who = 'admin', password = data.password) => request(app).post('/api/v1/auth/login').send({ email: data.users[who].emailNormalized, password });
   const cookie = (response) => response.headers['set-cookie'][0].split(';')[0];
   before(async () => {
-    ({ prisma } = testDatabase()); data = await fixtures(prisma);
-    config = { ...env, authDataEncryptionKey: randomBytes(32).toString('hex'), loginMaxAttempts: 200, cookieSecure: false };
+    ({ prisma } = await testDatabase()); data = await fixtures(prisma);
+    config = { ...integrationConfig(), authDataEncryptionKey: randomBytes(32).toString('hex'), loginMaxAttempts: 200, cookieSecure: false };
     app = createApp({ prisma, config });
   });
   after(async () => { await prisma?.$disconnect(); });
