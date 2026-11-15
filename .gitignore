@@ -6,6 +6,8 @@ backend/storage/
 .env
 .env.*
 !.env.example
+.seaf-local.env
+.seaf-pids.json
 *.log
 .DS_Store
 Thumbs.db

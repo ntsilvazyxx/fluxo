@@ -103,6 +103,7 @@ export function TaskFormPage() {
         acceptanceDurationMinutes: Number(raw.acceptanceDurationMinutes),
         executionDurationMinutes: Number(raw.executionDurationMinutes),
         initialAttachmentIds: attachmentIds,
+        ...(raw.reason ? { reason: String(raw.reason) } : {}),
       };
       const response = await request('/tasks', {
         method: 'POST',
@@ -126,6 +127,11 @@ export function TaskFormPage() {
       <h1 className="mt-1 text-3xl font-extrabold">Criar e encaminhar tarefa</h1>
       {user.role.code === 'ADMIN_MASTER' && <p role="status" className="mt-4 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-warning">Criação excepcional habilitada somente neste ambiente de testes. A ação será registrada na auditoria.</p>}
       <form onSubmit={submit} className="mt-7 space-y-5 rounded-2xl border border-border bg-white p-5 sm:p-7">
+        {user.role.code === 'ADMIN_MASTER' && (
+          <Field label="Justificativa administrativa">
+            <textarea aria-label="Justificativa administrativa" name="reason" required minLength={5} maxLength={2000} placeholder="Informe o motivo da intervenção do ADMIN MASTER" className="field" />
+          </Field>
+        )}
         <Field label="Título">
           <input aria-label="Título" name="title" required minLength={3} maxLength={255} className="field" />
         </Field>
