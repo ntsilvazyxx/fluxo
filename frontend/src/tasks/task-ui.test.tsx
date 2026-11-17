@@ -200,4 +200,37 @@ describe('cartão de tarefa (TaskCard)', () => {
     expect(restoredCard).toHaveClass('bg-white');
     expect(restoredCard?.style.backgroundColor).toBe('');
   });
+
+  it('dispara onSelect ao clicar no cartão e impede navegação', () => {
+    const task = sampleTask('task-10', '10', 'Tarefa para Modal');
+    const onSelect = vi.fn();
+    render(
+      <MemoryRouter>
+        <TaskCard task={task} onSelect={onSelect} />
+      </MemoryRouter>,
+    );
+
+    const link = screen.getByRole('link', { name: 'Abrir tarefa #10: Tarefa para Modal' });
+    fireEvent.click(link);
+
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith(task);
+  });
+
+  it('não dispara onSelect ao clicar no botão de paleta de cores', () => {
+    const task = sampleTask('task-11', '11', 'Tarefa com Paleta');
+    const onSelect = vi.fn();
+    const onColorChange = vi.fn();
+    render(
+      <MemoryRouter>
+        <TaskCard task={task} onSelect={onSelect} onColorChange={onColorChange} />
+      </MemoryRouter>,
+    );
+
+    const paletteBtn = screen.getByRole('button', { name: 'Personalizar cor da tarefa #11' });
+    fireEvent.click(paletteBtn);
+
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Paleta de cores do cartão' })).toBeInTheDocument();
+  });
 });

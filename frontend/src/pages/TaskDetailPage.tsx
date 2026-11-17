@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext.tsx';
 import { TaskLifecyclePanel } from '../tasks/TaskLifecyclePanel.tsx';
 import { ImageGalleryPanel } from '../tasks/ImageGalleryPanel.tsx';
 import { PriorityBadge, StatusBadge } from '../tasks/task-ui.tsx';
+import { TaskActivitiesTimeline } from '../tasks/TaskActivitiesTimeline.tsx';
 
 const key = () => crypto.randomUUID();
 const duration = (value?: number) => {
@@ -119,7 +120,9 @@ export function TaskDetailPage() {
         {canManage && ['PENDING', 'AWAITING_ACCEPTANCE', 'IN_PROGRESS'].includes(currentCycle.status) && <Action title="Cancelar tarefa"><ReasonAction label="Cancelar definitivamente" danger busy={busy} onSubmit={(reason) => mutate(`/tasks/${id}/cancel`, { expectedVersion: currentCycle.version, reason })} /></Action>}
       </div>
       <RequestHistory cycle={cycle} />
-      <section className="mt-7"><h2 className="text-xl font-extrabold">Histórico de alterações</h2><div className="mt-3 space-y-3">{task.history.map((event) => <article className="rounded-xl border border-border bg-white p-4" key={event.id}><p className="font-bold">{event.action}</p><p className="mt-1 text-xs text-muted">{new Date(event.createdAt).toLocaleString('pt-BR')}{event.reason ? ` · ${event.reason}` : ''}</p></article>)}</div></section>
+      <div className="mt-7">
+        <TaskActivitiesTimeline task={task} />
+      </div>
     </div>
   );
 }

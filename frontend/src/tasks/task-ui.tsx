@@ -46,6 +46,7 @@ export function TaskCard({
   search = '',
   color,
   onColorChange,
+  onSelect,
 }: {
   task: any;
   compact?: boolean;
@@ -53,6 +54,7 @@ export function TaskCard({
   search?: string;
   color?: string;
   onColorChange?: (color: string | null) => void;
+  onSelect?: (task: any) => void;
 }) {
   const c = task.cycle;
   const menu = useRef<HTMLDetailsElement | null>(null);
@@ -96,6 +98,12 @@ export function TaskCard({
         to={target}
         aria-label={`Abrir tarefa #${task.publicNumber}: ${c.title}`}
         className={`block rounded-xl ${compact || onColorChange ? 'p-3 pr-20' : 'p-4'}`}
+        onClick={(e) => {
+          if (onSelect) {
+            e.preventDefault();
+            onSelect(task);
+          }
+        }}
       >
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-bold text-brand-700">#{task.publicNumber}</span>

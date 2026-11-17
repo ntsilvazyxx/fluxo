@@ -6,6 +6,7 @@ import { EmptyTasks, TaskCard } from '../tasks/task-ui.tsx';
 import { useTasks } from '../tasks/useTasks.ts';
 import { useTaskColors } from '../tasks/useTaskColors.ts';
 import { kanbanColumns, kanbanFilterKeys, taskQuery } from '../tasks/kanban.ts';
+import { TaskDetailModal } from '../tasks/TaskDetailModal.tsx';
 
 export function KanbanPage() {
   const { request, user, features } = useAuth();
@@ -17,7 +18,18 @@ export function KanbanPage() {
   const filters = Object.fromEntries(kanbanFilterKeys.map((key) => [key, params.get(key) ?? '']));
   const [expanded, setExpanded] = useState(false);
   const [options, setOptions] = useState({ teams: [], users: [], error: '' });
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const lastFocusedCardRef = useRef<HTMLElement | null>(null);
   const boardRef = useRef<HTMLDivElement | null>(null);
+
+  const handleOpenTask = (id: string, element?: HTMLElement) => {
+    lastFocusedCardRef.current = element || (document.activeElement as HTMLElement);
+    setSelectedTaskId(id);
+  };
+
+  const handleCloseTask = () => {
+    setSelectedTaskId(null);
+  };
 
   const personal = useTasks(taskQuery('/my-tasks', filters, pageNumber(params.get('personalPage'))));
   const operational = useTasks(!isMyTasksRoute && managerial ? taskQuery('/kanban', filters, pageNumber(params.get('teamPage'))) : null);
@@ -245,6 +257,10 @@ export function KanbanPage() {
               <Link
                 key={task.id}
                 to={`/kanban/tarefas/${task.id}${search}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleOpenTask(task.id, e.currentTarget);
+                }}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 hover:border-amber-400 focus-visible:outline-2 focus-visible:outline-amber-600"
                 aria-label={`Abrir tarefa pendente #${task.publicNumber}: ${task.cycle?.title || task.title}`}
               >
@@ -305,6 +321,7 @@ export function KanbanPage() {
                       search={search}
                       color={colors[task.id]}
                       onColorChange={(newColor) => void setColor(task.id, newColor)}
+                      onSelect={(selected) => handleOpenTask(selected.id)}
                     />
                   ))}
                   {items.length === 0 && <EmptyTasks />}
@@ -323,6 +340,15 @@ export function KanbanPage() {
       <p className="mt-2 text-xs text-muted">
         Contagens por página. Cartões abrem os detalhes e as ações permitidas.
       </p>
+
+      {selectedTaskId && (
+        <TaskDetailModal
+          taskId={selectedTaskId}
+          onClose={handleCloseTask}
+          onTaskUpdated={reloadAll}
+          triggerElement={lastFocusedCardRef.current}
+        />
+      )}
     </div>
   );
 }
