@@ -9,7 +9,7 @@ import { createDeadlineService } from '../deadline/deadline.service.js';
 
 const missing = () => new AppError(404, 'TASK_NOT_FOUND', 'Tarefa não encontrada.');
 const conflict = (code, message) => new AppError(409, code, message);
-const scopeWhere = (actor) => {
+export const scopeWhere = (actor) => {
   if (['ADMIN_MASTER','SECRETARY'].includes(actor.roleCode)) return {};
   if (actor.roleCode === 'MANAGER') return { team: { managers: { some: { userId: actor.userId, endedAt: null } } } };
   return { currentCycle: { assignments: { some: { userId: actor.userId, OR: [{ endedAt: null }, { endReason: 'COMPLETED' }] } } } };

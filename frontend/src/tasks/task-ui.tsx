@@ -1,32 +1,251 @@
-import { AlertTriangle, CalendarClock, Circle, CircleCheck, Clock3, MoreHorizontal, UserRound } from 'lucide-react';
-import { useRef } from 'react';
+import { AlertTriangle, CalendarClock, Circle, CircleCheck, Clock3, MoreHorizontal, Palette, RotateCcw, UserRound } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-const statusLabels={PENDING:'Pendente',AWAITING_ACCEPTANCE:'Aguardando aceite',IN_PROGRESS:'Em andamento',COMPLETED:'Concluída',CANCELLED:'Cancelada'};
-const priorityLabels={LOW:'Baixa',NORMAL:'Normal',HIGH:'Alta',URGENT:'Urgente'};
-export function StatusBadge({status}){return <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-100 px-2.5 py-1 text-xs font-bold text-brand-900"><Circle size={10} fill="currentColor"/>{statusLabels[status]}</span>}
-export function PriorityBadge({priority}){const danger=priority==='URGENT';return <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${danger?'bg-red-50 text-danger':'bg-slate-100 text-muted'}`}>{priorityLabels[priority]}</span>}
-export function TaskCard({ task, compact = false, personal = false, search = '' }) {
-  const c = task.cycle;
-  const menu = useRef(null);
-  const target = `/kanban/tarefas/${task.id}${search}`;
-  return <article data-task-id={task.id} className="relative min-w-0 rounded-xl border border-border bg-white shadow-sm transition hover:border-brand-700">
-    <Link to={target} aria-label={`Abrir tarefa #${task.publicNumber}: ${c.title}`} className={`block rounded-xl ${compact ? 'p-3 pr-10' : 'p-4'}`}>
-      <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-bold text-brand-700">#{task.publicNumber}</span><PriorityBadge priority={c.priority} /></div>
-      <h3 className="mt-2 line-clamp-2 text-sm font-bold leading-5" title={c.title}>{c.title}</h3>
-      <p className="mt-1 truncate text-xs text-muted" title={task.team.name}>{task.team.name}</p>
-      <div className="mt-3 space-y-1.5 text-xs text-muted">
-        <p className="flex min-w-0 items-center gap-1.5"><UserRound size={13} className="shrink-0" /><span className="truncate">{c.assignment?.user?.name ?? (personal && c.status === 'COMPLETED' ? 'Concluída por você' : 'Sem responsável atual')}</span></p>
-        <p className={`flex items-start gap-1.5 ${c.overdue ? 'font-bold text-danger' : ''}`}>{c.overdue ? <AlertTriangle size={13} className="mt-0.5 shrink-0" /> : <CalendarClock size={13} className="mt-0.5 shrink-0" />}<span>{c.deadlineAt ? new Date(c.deadlineAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'Sem prazo'}{c.overdue ? ' · Atrasada' : ''}</span></p>
-      </div>
-      {personal && <div className="mt-2"><StatusBadge status={c.status} /></div>}
-    </Link>
-    {compact && <details ref={menu} className="absolute right-1 top-1 z-10" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false; }} onKeyDown={(event) => { if (event.key === 'Escape') { menu.current.open = false; menu.current.querySelector('summary').focus(); } }}>
-      <summary aria-label={`Ações da tarefa #${task.publicNumber}`} className="grid size-11 cursor-pointer list-none place-items-center rounded-lg text-muted hover:bg-brand-100"><MoreHorizontal size={19} /></summary>
-      <div className="absolute right-0 top-10 w-52 rounded-xl border border-border bg-white p-1 shadow-card">
-        <Link className="flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold hover:bg-brand-100" to={target}>Detalhes e histórico</Link>
-        {personal && ['AWAITING_ACCEPTANCE', 'IN_PROGRESS'].includes(c.status) && <Link className="flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold hover:bg-brand-100" to={target}>{c.status === 'AWAITING_ACCEPTANCE' ? 'Responder atribuição' : 'Execução e solicitações'}</Link>}
-      </div>
-    </details>}
-  </article>;
+import { CARD_COLORS, CardColorKey, COLOR_OPTIONS } from './task-colors.ts';
+
+const statusLabels = {
+  PENDING: 'Pendente',
+  AWAITING_ACCEPTANCE: 'Aguardando aceite',
+  IN_PROGRESS: 'Em andamento',
+  COMPLETED: 'Concluída',
+  CANCELLED: 'Cancelada',
+};
+
+const priorityLabels = {
+  LOW: 'Baixa',
+  NORMAL: 'Normal',
+  HIGH: 'Alta',
+  URGENT: 'Urgente',
+};
+
+export function StatusBadge({ status }: { status: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-100 px-2.5 py-1 text-xs font-bold text-brand-900">
+      <Circle size={10} fill="currentColor" />
+      {statusLabels[status as keyof typeof statusLabels] || status}
+    </span>
+  );
 }
-export function EmptyTasks({history=false}){return <div className="grid min-h-40 place-items-center rounded-2xl border border-dashed border-border bg-white p-6 text-center"><div>{history?<CircleCheck className="mx-auto text-success"/>:<Clock3 className="mx-auto text-brand-700"/>}<p className="mt-3 font-bold">Nenhuma tarefa encontrada</p><p className="mt-1 text-sm text-muted">Ajuste os filtros ou aguarde novas movimentações.</p></div></div>}
+
+export function PriorityBadge({ priority }: { priority: string }) {
+  const danger = priority === 'URGENT';
+  return (
+    <span
+      className={`rounded-full px-2.5 py-1 text-xs font-bold ${danger ? 'bg-red-50 text-danger' : 'bg-slate-100 text-muted'
+        }`}
+    >
+      {priorityLabels[priority as keyof typeof priorityLabels] || priority}
+    </span>
+  );
+}
+
+export function TaskCard({
+  task,
+  compact = false,
+  personal = false,
+  search = '',
+  color,
+  onColorChange,
+}: {
+  task: any;
+  compact?: boolean;
+  personal?: boolean;
+  search?: string;
+  color?: string;
+  onColorChange?: (color: string | null) => void;
+}) {
+  const c = task.cycle;
+  const menu = useRef<HTMLDetailsElement | null>(null);
+  const paletteRef = useRef<HTMLDivElement | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const target = `/kanban/tarefas/${task.id}${search}`;
+  const colorConfig = CARD_COLORS[(color as CardColorKey) || 'default'] || CARD_COLORS.default;
+  const isCustomColor = Boolean(color && color !== 'default' && CARD_COLORS[color as CardColorKey]);
+
+  useEffect(() => {
+    if (!paletteOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setPaletteOpen(false);
+      }
+    };
+    const onMouseDown = (e: MouseEvent) => {
+      if (paletteRef.current && !paletteRef.current.contains(e.target as Node)) {
+        setPaletteOpen(false);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('mousedown', onMouseDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onMouseDown);
+    };
+  }, [paletteOpen]);
+
+  return (
+    <article
+      data-task-id={task.id}
+      className={`relative min-w-0 rounded-xl border shadow-sm transition ${colorConfig.bgClass} ${colorConfig.borderClass} ${colorConfig.hoverBorderClass}`}
+      style={
+        isCustomColor
+            ? { backgroundColor: colorConfig.bgColor, borderColor: colorConfig.borderColor }
+            : undefined
+      }
+    >
+      <Link
+        to={target}
+        aria-label={`Abrir tarefa #${task.publicNumber}: ${c.title}`}
+        className={`block rounded-xl ${compact || onColorChange ? 'p-3 pr-20' : 'p-4'}`}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-bold text-brand-700">#{task.publicNumber}</span>
+          <PriorityBadge priority={c.priority} />
+        </div>
+        <h3 className="mt-2 line-clamp-2 text-sm font-bold leading-5 text-text" title={c.title}>
+          {c.title}
+        </h3>
+        <p className="mt-1 truncate text-xs text-muted" title={task.team.name}>
+          {task.team.name}
+        </p>
+        <div className="mt-3 space-y-1.5 text-xs text-muted">
+          <p className="flex min-w-0 items-center gap-1.5">
+            <UserRound size={13} className="shrink-0" />
+            <span className="truncate">
+              {c.assignment?.user?.name ?? (personal && c.status === 'COMPLETED' ? 'Concluída por você' : 'Sem responsável atual')}
+            </span>
+          </p>
+          <p className={`flex items-start gap-1.5 ${c.overdue ? 'font-bold text-danger' : ''}`}>
+            {c.overdue ? <AlertTriangle size={13} className="mt-0.5 shrink-0" /> : <CalendarClock size={13} className="mt-0.5 shrink-0" />}
+            <span>
+              {c.deadlineAt ? new Date(c.deadlineAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'Sem prazo'}
+              {c.overdue ? ' · Atrasada' : ''}
+            </span>
+          </p>
+        </div>
+        {personal && (
+          <div className="mt-2">
+            <StatusBadge status={c.status} />
+          </div>
+        )}
+      </Link>
+
+      <div className="absolute right-1 top-1 z-10 flex items-center gap-0.5">
+        {onColorChange && (
+          <div ref={paletteRef} className="relative">
+            <button
+              type="button"
+              aria-label={`Personalizar cor da tarefa #${task.publicNumber}`}
+              aria-expanded={paletteOpen}
+              className="grid size-9 cursor-pointer place-items-center rounded-lg text-muted hover:bg-black/5 hover:text-text transition-colors focus-visible:outline-2 focus-visible:outline-brand-700"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setPaletteOpen((prev) => !prev);
+              }}
+            >
+              <Palette size={16} />
+            </button>
+            {paletteOpen && (
+              <div
+                role="dialog"
+                aria-label="Paleta de cores do cartão"
+                className="absolute right-0 top-10 z-30 w-44 rounded-xl border border-border bg-white p-2.5 shadow-card"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <p className="text-[11px] font-bold text-muted mb-2">Cor do cartão</p>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {COLOR_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      aria-label={`Selecionar cor ${opt.label}`}
+                      title={opt.label}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onColorChange(opt.id === 'default' ? null : opt.id);
+                        setPaletteOpen(false);
+                      }}
+                      className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-brand-700 ${(color || 'default') === opt.id
+                          ? 'ring-2 ring-brand-700 ring-offset-1 border-brand-700'
+                          : 'border-slate-300 hover:border-slate-400'
+                        }`}
+                      style={{ backgroundColor: opt.swatchBg }}
+                    >
+                      {opt.id === 'default' && <RotateCcw size={12} className="text-slate-500" />}
+                    </button>
+                  ))}
+                </div>
+                {isCustomColor && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onColorChange(null);
+                      setPaletteOpen(false);
+                    }}
+                    className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-slate-50 py-1.5 text-[11px] font-semibold text-muted hover:bg-slate-100 hover:text-text transition-colors"
+                  >
+                    <RotateCcw size={12} />
+                    Restaurar cor padrão
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {compact && (
+          <details
+            ref={menu}
+            className="relative"
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                event.currentTarget.open = false;
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                if (menu.current) {
+                  menu.current.open = false;
+                  menu.current.querySelector('summary')?.focus();
+                }
+              }
+            }}
+          >
+            <summary
+              aria-label={`Ações da tarefa #${task.publicNumber}`}
+              className="grid size-9 cursor-pointer list-none place-items-center rounded-lg text-muted hover:bg-black/5 hover:text-text transition-colors"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreHorizontal size={18} />
+            </summary>
+            <div className="absolute right-0 top-10 z-20 w-52 rounded-xl border border-border bg-white p-1 shadow-card">
+              <Link className="flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold hover:bg-brand-100" to={target}>
+                Detalhes e histórico
+              </Link>
+              {personal && ['AWAITING_ACCEPTANCE', 'IN_PROGRESS'].includes(c.status) && (
+                <Link className="flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold hover:bg-brand-100" to={target}>
+                  {c.status === 'AWAITING_ACCEPTANCE' ? 'Responder atribuição' : 'Execução e solicitações'}
+                </Link>
+              )}
+            </div>
+          </details>
+        )}
+      </div>
+    </article>
+  );
+}
+
+export function EmptyTasks({ history = false }: { history?: boolean }) {
+  return (
+    <div className="grid min-h-40 place-items-center rounded-2xl border border-dashed border-border bg-white p-6 text-center">
+      <div>
+        {history ? <CircleCheck className="mx-auto text-success" /> : <Clock3 className="mx-auto text-brand-700" />}
+        <p className="mt-3 font-bold">Nenhuma tarefa encontrada</p>
+        <p className="mt-1 text-sm text-muted">Ajuste os filtros ou aguarde novas movimentações.</p>
+      </div>
+    </div>
+  );
+}

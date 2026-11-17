@@ -23,7 +23,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return inFlight.current;
   }, [apply]);
   useEffect(() => { void refresh().catch(() => setSession({ status: 'anonymous', accessToken: null, user: null, features: { adminTaskCreation: false } })); }, [refresh]);
-  const request = useCallback(async (path: string, options: RequestInit = {}) => { const send = (token: string | null) => fetch(`${API}${path}`, { ...options, credentials: 'include', headers: { 'content-type': 'application/json', ...options.headers, ...(token ? { authorization: `Bearer ${token}` } : {}) } }); let response = await send(session.accessToken); if (response.status === 401) { const renewed = await refresh(); if (renewed) response = await send(renewed.accessToken); } return response; }, [refresh, session.accessToken]);
+  const request = useCallback(async (path: string, options: RequestInit = {}) => {
+    const rawHeaders = options.headers instanceof Headers
+      ? Object.fromEntries(options.headers.entries())
+      : (Array.isArray(options.headers) ? Object.fromEntries(options.headers) : (options.headers || {}));
+    const hasContentType = Object.keys(rawHeaders).some((k) => k.toLowerCase() === 'content-type');
+    const headers = {
+      ...(hasContentType ? {} : { 'content-type': 'application/json' }),
+      ...rawHeaders,
+    };
+    const send = (token: string | null) => fetch(`${API}${path}`, {
+      ...options,
+      credentials: 'include',
+      headers: {
+        ...headers,
+        ...(token ? { authorization: `Bearer ${token}` } : {})
+      }
+    });
+    let response = await send(session.accessToken);
+    if (response.status === 401) {
+      const renewed = await refresh();
+      if (renewed) response = await send(renewed.accessToken);
+    }
+    return response;
+  }, [refresh, session.accessToken]);
   const upload = useCallback(async (path: string, form: FormData, { headers = {}, onProgress }: UploadOptions = {}) => { const send = (token: string | null) => new Promise<UploadResponse>((resolve, reject) => { const xhr = new XMLHttpRequest(); xhr.open('POST', `${API}${path}`); xhr.withCredentials = true; Object.entries(headers).forEach(([name, value]) => xhr.setRequestHeader(name, value)); if (token) xhr.setRequestHeader('authorization', `Bearer ${token}`); xhr.upload.addEventListener('progress', (event) => { if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100)); }); xhr.addEventListener('error', () => reject(new Error('Falha de rede durante o envio.'))); xhr.addEventListener('load', () => resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, json: async () => JSON.parse(xhr.responseText || '{}') as unknown })); xhr.send(form); }); let response = await send(session.accessToken); if (response.status === 401) { const renewed = await refresh(); if (renewed) response = await send(renewed.accessToken); } return response; }, [refresh, session.accessToken]);
   const login = async (email: string, password: string) => { const response = await fetch(`${API}/auth/login`, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, password }) }); const body: unknown = await response.json(); if (!response.ok) throw new Error(errorOf(body, 'Falha ao entrar.')); const data = dataOf(body); if (!isLogin(data)) throw new Error('Resposta de autenticação inválida.'); return apply(data); };
   const logout = async () => { await fetch(`${API}/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => {}); setSession({ status: 'anonymous', accessToken: null, user: null, features: { adminTaskCreation: false } }); };

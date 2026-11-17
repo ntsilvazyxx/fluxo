@@ -146,6 +146,7 @@ model User {
   passwordResetTokens     PasswordResetToken[]
   legacyMfaCredentials    LegacyMfaCredential[] @ignore
   notificationPreferences NotificationPreference[]
+  taskPreferences         UserTaskPreference[]
   settingsUpdated         SystemSetting[]          @relation("SystemSettingUpdater")
 
   @@index([roleId, isActive])
@@ -282,6 +283,7 @@ model Task {
   parentCycle    TaskCycle?  @relation("CycleSubtasks", fields: [parentCycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   currentCycle   TaskCycle?  @relation("TaskCurrentCycle", fields: [currentCycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   cycles         TaskCycle[] @relation("TaskCycles")
+  userPreferences UserTaskPreference[]
 
   @@index([teamId, deletedAt])
   @@index([createdById])
@@ -658,3 +660,21 @@ model SystemSetting {
   @@index([updatedById])
   @@map("system_settings")
 }
+
+model UserTaskPreference {
+  id        String   @id @db.Char(36)
+  userId    String   @db.Char(36)
+  taskId    String   @db.Char(36)
+  color     String   @db.VarChar(30)
+  createdAt DateTime @default(now()) @db.DateTime(3)
+  updatedAt DateTime @updatedAt @db.DateTime(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Restrict)
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade, onUpdate: Restrict)
+
+  @@unique([userId, taskId])
+  @@index([userId])
+  @@index([taskId])
+  @@map("user_task_preferences")
+}
+

@@ -12,6 +12,7 @@ import { createImageRouter, createTaskImageRouter } from '../modules/images/imag
 import { createAttachmentRouter } from '../modules/attachments/attachment.routes.js';
 import { createNotificationRouter } from '../modules/notifications/notification.routes.js';
 import { createDashboardRouter, createReportRouter } from '../modules/dashboard/dashboard.routes.js';
+import { createPreferenceRouter } from '../modules/preferences/preference.routes.js';
 
 export const createApiRouter = (dependencies) => {
   const apiRouter = Router();
@@ -43,6 +44,7 @@ apiRouter.use('/health', healthRouter);
   apiRouter.use('/images', createImageRouter(dependencies));
   apiRouter.use('/task-uploads', createAttachmentRouter(dependencies));
   apiRouter.use('/notifications', createNotificationRouter(dependencies));
+  apiRouter.use('/user-preferences', createPreferenceRouter(dependencies));
   apiRouter.use('/dashboard', createDashboardRouter(dependencies));
   apiRouter.use('/reports', createReportRouter(dependencies));
   return apiRouter;

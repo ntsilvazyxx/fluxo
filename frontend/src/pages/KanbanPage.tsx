@@ -1,9 +1,10 @@
 import { ChevronLeft, ChevronRight, Filter, Plus, Search, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.tsx';
 import { EmptyTasks, TaskCard } from '../tasks/task-ui.tsx';
 import { useTasks } from '../tasks/useTasks.ts';
+import { useTaskColors } from '../tasks/useTaskColors.ts';
 import { kanbanColumns, kanbanFilterKeys, taskQuery } from '../tasks/kanban.ts';
 
 export function KanbanPage() {
@@ -71,10 +72,10 @@ export function KanbanPage() {
     ? (personal.tasks || []).filter((task: any) => task.cycle?.assignment?.userId === user.id)
     : managerial
       ? [
-          ...(operational.tasks || []),
-          ...(completedOperational?.tasks || []),
-          ...(personal.tasks || []),
-        ]
+        ...(operational.tasks || []),
+        ...(completedOperational?.tasks || []),
+        ...(personal.tasks || []),
+      ]
       : (personal.tasks || []);
 
   const tasksMap = new Map<string, any>();
@@ -84,6 +85,8 @@ export function KanbanPage() {
     }
   }
   const allTasks = Array.from(tasksMap.values());
+  const taskIds = useMemo(() => allTasks.map((t) => t.id), [allTasks]);
+  const { colors, setColor } = useTaskColors(taskIds);
 
   const columns = kanbanColumns.map(([status, label]) => ({
     status,
@@ -294,7 +297,15 @@ export function KanbanPage() {
               ) : (
                 <div className="space-y-3 flex-1">
                   {items.map((task) => (
-                    <TaskCard task={task} key={task.id} compact personal={isMyTasksRoute || !managerial} search={search} />
+                    <TaskCard
+                      task={task}
+                      key={task.id}
+                      compact
+                      personal={isMyTasksRoute || !managerial}
+                      search={search}
+                      color={colors[task.id]}
+                      onColorChange={(newColor) => void setColor(task.id, newColor)}
+                    />
                   ))}
                   {items.length === 0 && <EmptyTasks />}
                 </div>

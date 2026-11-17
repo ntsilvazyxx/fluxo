@@ -18,8 +18,8 @@ export function NavHorizontal() {
   ];
 
   return (
-    <nav aria-label="Navegação principal" className="w-full px-4 sm:px-6 py-2 sm:py-2.5 overflow-x-auto no-scrollbar">
-      <ul className="flex items-center gap-3 sm:gap-4 md:gap-6 min-w-max">
+    <nav aria-label="Navegação principal" className="w-full flex justify-center overflow-x-auto no-scrollbar">
+      <ul className="flex items-center justify-center gap-2 sm:gap-3 md:gap-5 min-w-max mx-auto px-4 sm:px-6">
         {items.map((item) => (
           <li key={item.to}>
             <NavItem to={item.to} label={item.label} icon={item.icon} end={item.end} />

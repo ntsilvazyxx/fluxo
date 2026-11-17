@@ -118,8 +118,15 @@ describe('Kanban Padronizado (Fase 2)', () => {
     expect(screen.queryByRole('combobox', { name: 'Responsável' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Nova tarefa' })).not.toBeInTheDocument();
 
-    // Técnico consome exclusivamente /my-tasks
-    expect(auth.request.mock.calls.every(([path]) => path.startsWith('/my-tasks?'))).toBe(true);
+    // Técnico consome tarefas exclusivamente de /my-tasks (sem acessar endpoints gerenciais como /kanban)
+    expect(auth.request.mock.calls.some(([path]) => path.startsWith('/kanban'))).toBe(false);
+    expect(auth.request.mock.calls.some(([path]) => path.startsWith('/teams'))).toBe(false);
+    expect(auth.request.mock.calls.some(([path]) => path.startsWith('/users'))).toBe(false);
+    expect(
+      auth.request.mock.calls
+        .filter(([path]) => !path.startsWith('/user-preferences'))
+        .every(([path]) => path.startsWith('/my-tasks?')),
+    ).toBe(true);
   });
 
   it('TECHNICIAN na rota /minhas-tarefas visualiza título específico e escopo de responsabilidade direta', async () => {

@@ -66,6 +66,24 @@ describe('Navegação Horizontal — Header e NavHorizontal', () => {
     expect(arquivadasLink).not.toHaveAttribute('aria-current', 'page');
   });
 
+  it('organiza o cabeçalho em duas barras horizontais com a navegação dedicada e centralizada', () => {
+    const { container } = renderNav();
+
+    const header = container.querySelector('header');
+    expect(header).toBeInTheDocument();
+
+    // Primeira barra — institucional (identificação e usuário nas extremidades)
+    const institutionalBar = header?.firstElementChild;
+    expect(institutionalBar).toHaveClass('flex', 'items-center', 'justify-between');
+
+    // Segunda barra — sub-barra dedicada de navegação centralizada
+    const nav = screen.getByRole('navigation', { name: 'Navegação principal' });
+    expect(nav).toHaveClass('flex', 'justify-center');
+
+    const navList = nav.querySelector('ul');
+    expect(navList).toHaveClass('flex', 'items-center', 'justify-center');
+  });
+
   describe('RBAC e opções por perfil', () => {
     it('TECHNICIAN visualiza exclusivamente Kanban, Minhas Tarefas, Arquivadas e Equipes', () => {
       auth.user = {
