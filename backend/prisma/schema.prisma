@@ -147,6 +147,7 @@ model User {
   legacyMfaCredentials    LegacyMfaCredential[] @ignore
   notificationPreferences NotificationPreference[]
   taskPreferences         UserTaskPreference[]
+  taskComments            TaskComment[]            @relation("TaskCommentAuthor")
   settingsUpdated         SystemSetting[]          @relation("SystemSettingUpdater")
 
   @@index([roleId, isActive])
@@ -284,6 +285,7 @@ model Task {
   currentCycle   TaskCycle?  @relation("TaskCurrentCycle", fields: [currentCycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   cycles         TaskCycle[] @relation("TaskCycles")
   userPreferences UserTaskPreference[]
+  comments       TaskComment[]       @relation("TaskComments")
 
   @@index([teamId, deletedAt])
   @@index([createdById])
@@ -676,5 +678,22 @@ model UserTaskPreference {
   @@index([userId])
   @@index([taskId])
   @@map("user_task_preferences")
+}
+
+model TaskComment {
+  id              String   @id @db.Char(36)
+  taskId          String   @db.Char(36)
+  authorId        String   @db.Char(36)
+  content         String   @db.Text
+  clientMessageId String?  @unique @db.VarChar(64)
+  createdAt       DateTime @default(now()) @db.DateTime(3)
+  updatedAt       DateTime @updatedAt @db.DateTime(3)
+
+  task   Task @relation("TaskComments", fields: [taskId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  author User @relation("TaskCommentAuthor", fields: [authorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([taskId, createdAt])
+  @@index([authorId])
+  @@map("task_comments")
 }
 

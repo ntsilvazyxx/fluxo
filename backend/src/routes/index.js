@@ -13,6 +13,7 @@ import { createAttachmentRouter } from '../modules/attachments/attachment.routes
 import { createNotificationRouter } from '../modules/notifications/notification.routes.js';
 import { createDashboardRouter, createReportRouter } from '../modules/dashboard/dashboard.routes.js';
 import { createPreferenceRouter } from '../modules/preferences/preference.routes.js';
+import { createTaskCommentRouter } from '../modules/comments/comment.routes.js';
 
 export const createApiRouter = (dependencies) => {
   const apiRouter = Router();
@@ -31,6 +32,7 @@ apiRouter.use('/health', healthRouter);
   apiRouter.use('/users', createUserRouter(dependencies));
   apiRouter.use('/teams', createTeamRouter(dependencies));
   apiRouter.use('/tasks', createTaskRouter(dependencies));
+  apiRouter.use('/tasks', createTaskCommentRouter(dependencies));
   apiRouter.use('/tasks', createSubtaskRouter(dependencies));
   apiRouter.use('/assignments', createAssignmentRouter(dependencies));
   const taskQueries = createTaskQueryRouters(dependencies);

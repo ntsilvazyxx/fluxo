@@ -6,6 +6,7 @@ import { ACTIVE_STATUSES, requireExpectedVersion, TERMINAL_STATUSES, transitionT
 import { presentTask } from './task.presenter.js';
 import { calculateAssignmentMetrics } from '../time-accounting/time-accounting.js';
 import { createDeadlineService } from '../deadline/deadline.service.js';
+import { presentComment } from '../comments/comment.service.js';
 
 const missing = () => new AppError(404, 'TASK_NOT_FOUND', 'Tarefa não encontrada.');
 const conflict = (code, message) => new AppError(409, code, message);
@@ -208,7 +209,7 @@ export const createTaskService = ({ prisma, attachmentService }) => ({
     const assignmentInclude = { user: true, pauseIntervals: { orderBy: { startedAt: 'asc' } }, calendarVersion: { include: { calendar: true, schedules: true, exceptions: true } } };
     const task = await prisma.task.findFirst({ where: { id, deletedAt: null, ...scopeWhere(actor) }, include: { team: true, currentCycle: { include: { assignments: { include: assignmentInclude, orderBy: { assignedAt: 'desc' } } } }, cycles: { include: { assignments: { include: assignmentInclude, orderBy: { assignedAt: 'asc' } }, requests: { include: { pauseIntervals: true }, orderBy: { createdAt: 'asc' } }, deadlineChanges: { orderBy: { createdAt: 'asc' } }, notes: { orderBy: { createdAt: 'asc' } } }, orderBy: { cycleNumber: 'asc' } } } });
     if (!task) throw missing();
-    const [parentCycle, subtasks] = await Promise.all([
+    const [parentCycle, subtasks, comments] = await Promise.all([
       task.parentCycleId
         ? prisma.taskCycle.findUnique({
             where: { id: task.parentCycleId },
@@ -220,11 +221,18 @@ export const createTaskService = ({ prisma, attachmentService }) => ({
         include: includeCurrent,
         orderBy: { createdAt: 'asc' },
       }),
+      prisma.taskComment
+        ? prisma.taskComment.findMany({
+            where: { taskId: task.id },
+            include: { author: { select: { id: true, name: true, role: { select: { code: true, label: true } } } } },
+            orderBy: { createdAt: 'asc' },
+          })
+        : Promise.resolve([]),
     ]);
     const ids = [task.id, ...task.cycles.map((cycle)=>cycle.id), ...task.cycles.flatMap((cycle)=>cycle.assignments.map((item)=>item.id))];
     const events = await prisma.auditEvent.findMany({ where: { entityId: { in: ids } }, orderBy: { createdAt: 'asc' } });
     const observedAt = new Date();
-    return { ...presentTask(task), parentTask: parentCycle ? { id: parentCycle.task.id, publicNumber: String(parentCycle.task.publicNumber), cycleId: parentCycle.id, title: parentCycle.title } : null, subtasks: subtasks.map(presentTask), cycles: task.cycles.map((cycle)=>({ id: cycle.id, cycleNumber: cycle.cycleNumber, title: cycle.title, description: cycle.description, priority: cycle.priority, status: cycle.status, deadlineAt: cycle.deadlineAt, version: cycle.version, openedAt: cycle.openedAt, closedAt: cycle.closedAt, completionText: cycle.completionText, assignments: cycle.assignments.map((a)=>({ id:a.id,userId:a.userId,user:{id:a.user.id,name:a.user.name},assignedAt:a.assignedAt,acceptedAt:a.acceptedAt,endedAt:a.endedAt,endReason:a.endReason,calendarVersionId:a.calendarVersionId,pauses:a.pauseIntervals,metrics:assignmentMetrics(a, cycle.deadlinePolicy, observedAt) })), requests:cycle.requests.map(r=>({id:r.id,type:r.type,status:r.status,reason:r.reason,proposedDeadlineAt:r.proposedDeadlineAt,decidedById:r.decidedById,decidedAt:r.decidedAt,decisionReason:r.decisionReason,createdAt:r.createdAt,pauses:r.pauseIntervals})), deadlineChanges: cycle.deadlineChanges, notes: cycle.notes })), history: events };
+    return { ...presentTask(task), parentTask: parentCycle ? { id: parentCycle.task.id, publicNumber: String(parentCycle.task.publicNumber), cycleId: parentCycle.id, title: parentCycle.title } : null, subtasks: subtasks.map(presentTask), cycles: task.cycles.map((cycle)=>({ id: cycle.id, cycleNumber: cycle.cycleNumber, title: cycle.title, description: cycle.description, priority: cycle.priority, status: cycle.status, deadlineAt: cycle.deadlineAt, version: cycle.version, openedAt: cycle.openedAt, closedAt: cycle.closedAt, completionText: cycle.completionText, assignments: cycle.assignments.map((a)=>({ id:a.id,userId:a.userId,user:{id:a.user.id,name:a.user.name},assignedAt:a.assignedAt,acceptedAt:a.acceptedAt,endedAt:a.endedAt,endReason:a.endReason,calendarVersionId:a.calendarVersionId,pauses:a.pauseIntervals,metrics:assignmentMetrics(a, cycle.deadlinePolicy, observedAt) })), requests:cycle.requests.map(r=>({id:r.id,type:r.type,status:r.status,reason:r.reason,proposedDeadlineAt:r.proposedDeadlineAt,decidedById:r.decidedById,decidedAt:r.decidedAt,decisionReason:r.decisionReason,createdAt:r.createdAt,pauses:r.pauseIntervals})), deadlineChanges: cycle.deadlineChanges, notes: cycle.notes })), history: events, comments: comments.map(presentComment) };
   },
 
   async create(request, input, key) {

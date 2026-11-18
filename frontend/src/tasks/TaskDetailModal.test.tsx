@@ -86,6 +86,14 @@ const mockTaskData = (status = 'AWAITING_ACCEPTANCE', assignedUserId = 'user-tec
     },
   ],
   subtasks: [],
+  comments: [
+    {
+      id: 'comment-1',
+      author: { name: 'Técnico Responsável' },
+      content: 'Comentário sobre o andamento da migração.',
+      createdAt: '2026-11-10T09:35:00.000Z',
+    },
+  ],
   history: [
     {
       id: 'event-1',
@@ -161,19 +169,21 @@ describe('Modal de Detalhes da Tarefa (TaskDetailModal)', () => {
     expect(screen.getByRole('region', { name: 'Comentários e Atividades' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Comentários e Atividades' })).toBeInTheDocument();
 
-    // Comentário (note) diferenciado de evento automático do sistema
+    // Comentário diferenciado de evento automático do sistema e notas de execução
     expect(screen.getByText('Comentário')).toBeInTheDocument();
+    expect(screen.getByText('Comentário sobre o andamento da migração.')).toBeInTheDocument();
+
+    expect(screen.getByText('Nota de execução')).toBeInTheDocument();
     expect(screen.getByText('Iniciando o checklist inicial de conectividade.')).toBeInTheDocument();
 
     expect(screen.getAllByText('Evento do sistema').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/Tarefa criada e atribuída/)).toBeInTheDocument();
 
-    // Área reservada para envio de comentários na Fase 5 (desabilitada e sem backend)
+    // Área funcional para envio de comentários na Fase 5
     const commentInput = screen.getByPlaceholderText('Escreva seu comentário...');
-    expect(commentInput).toBeDisabled();
-    expect(screen.getByRole('button', { name: /Enviar/i })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /Anexar/i })).toBeDisabled();
-    expect(screen.getByText(/O chat com persistência e envio de mensagens em tempo real será ativado na Fase 5/i)).toBeInTheDocument();
+    expect(commentInput).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: /Enviar/i })).toBeDisabled(); // Desabilitado enquanto vazio
+    expect(screen.getByText(/caracteres restantes/i)).toBeInTheDocument();
   });
 
   it('exibe resultado da execução em destaque quando a tarefa está concluída', async () => {
