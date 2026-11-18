@@ -269,11 +269,13 @@ model CalendarException {
 }
 
 model Task {
-  id             String      @id @db.Char(36)
-  publicNumber   BigInt      @unique @default(autoincrement()) @db.UnsignedBigInt
-  teamId         String      @db.Char(36)
-  createdById    String      @db.Char(36)
-  parentCycleId  String?     @db.Char(36)
+  id                   String               @id @db.Char(36)
+  publicNumber         BigInt               @unique @default(autoincrement()) @db.UnsignedBigInt
+  teamId               String               @db.Char(36)
+  createdById          String               @db.Char(36)
+  sigadocProcessNumber String?              @db.VarChar(128)
+  sigadocProcessLink   String?              @db.VarChar(2048)
+  parentCycleId        String?              @db.Char(36)
   currentCycleId String?     @unique @db.Char(36)
   version        Int         @default(0) @db.UnsignedInt
   createdAt      DateTime    @default(now()) @db.DateTime(3)

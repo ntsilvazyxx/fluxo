@@ -41,6 +41,7 @@ const mockTaskDetail = (id: string, title: string, status = 'AWAITING_ACCEPTANCE
   id,
   publicNumber: id,
   team: { id: 'team-1', name: 'Equipe de Operações' },
+  createdById: 'creator-1',
   createdBy: { id: 'creator-1', name: 'Gestor Criador' },
   createdAt: '2026-11-10T09:00:00.000Z',
   updatedAt: '2026-11-10T09:00:00.000Z',
@@ -286,6 +287,9 @@ describe('Integração do Modal de Detalhes no Kanban (Fase 4)', () => {
     // Informações da tarefa
     expect(within(modal).getAllByText('Descrição detalhada da tarefa Entrega Pessoal 1.').length).toBeGreaterThanOrEqual(1);
     expect(within(modal).getByText('Equipe de Operações')).toBeInTheDocument();
+
+    // Expande "Mais informações" para visualizar criador e política de prazo
+    fireEvent.click(within(modal).getByRole('button', { name: 'Mais informações' }));
     expect(within(modal).getAllByText('Gestor Criador').length).toBeGreaterThanOrEqual(1);
     expect(within(modal).getByText('Prazos corridos')).toBeInTheDocument();
 
@@ -378,6 +382,65 @@ describe('Integração do Modal de Detalhes no Kanban (Fase 4)', () => {
     expect(within(modal).getByRole('heading', { name: 'Entrega Pessoal 1' })).toBeInTheDocument();
   });
 
+  it('11. Opção "Resumo da tarefa" abre pop-up compacto sem abrir modal completo; botão "Ver detalhes completos" abre o modal', async () => {
+    auth.user = { id: 'self', role: { code: 'MANAGER' } };
+
+    const { container } = render(
+      <MemoryRouter initialEntries={['/kanban']}>
+        <Routes>
+          <Route path="/kanban" element={<KanbanPage />} />
+          <Route path="/kanban/tarefas/:id" element={<div data-testid="pagina-separada">Página Separada</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole('heading', { name: 'Entrega Pessoal 1' });
+
+    // Cartão da tarefa #1
+    const card1 = container.querySelector('article[data-task-id="1"]') as HTMLElement;
+    expect(card1).toBeInTheDocument();
+
+    // Menu de três pontinhos da tarefa #1
+    const menuSummary = within(card1).getByLabelText('Ações da tarefa #1');
+    fireEvent.click(menuSummary);
+
+    // Clica na opção "Resumo da tarefa" especificamente do cartão #1
+    const resumoBtn = within(card1).getByRole('button', { name: 'Resumo da tarefa' });
+    fireEvent.click(resumoBtn);
+
+    // 1. O pop-up compacto abre próximo ao cartão, SEM abrir o modal completo
+    const summaryPopup = within(card1).getByRole('dialog', { name: 'Resumo da tarefa #1' });
+    expect(summaryPopup).toBeInTheDocument();
+    expect(within(summaryPopup).getByText('#1')).toBeInTheDocument();
+    expect(within(summaryPopup).getByText('Entrega Pessoal 1')).toBeInTheDocument();
+    expect(within(summaryPopup).getByText('Equipe de Operações')).toBeInTheDocument();
+
+    // Modal completo NÃO está aberto ainda e não houve redirecionamento
+    expect(screen.queryByRole('heading', { name: 'Descrição detalhada' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('pagina-separada')).not.toBeInTheDocument();
+
+    // 2. Clica em "Ver detalhes completos" dentro do pop-up compacto
+    const verDetalhesBtn = within(summaryPopup).getByRole('button', { name: 'Ver detalhes completos' });
+    fireEvent.click(verDetalhesBtn);
+
+    // 3. Pop-up compacto é fechado e o modal completo abre sobre o Kanban
+    expect(screen.queryByRole('dialog', { name: 'Resumo da tarefa #1' })).not.toBeInTheDocument();
+    const modal = await screen.findByRole('dialog');
+    expect(modal).toBeInTheDocument();
+    expect(within(modal).getByRole('heading', { name: 'Entrega Pessoal 1' })).toBeInTheDocument();
+
+    // 4. Kanban permanece visível ao fundo
+    expect(screen.getByRole('region', { name: 'Colunas do Kanban' })).toBeInTheDocument();
+
+    // 5. Fechamento pelo X fecha o modal e retorna o foco ao botão de três pontinhos
+    const closeBtn = screen.getByRole('button', { name: 'Fechar modal de detalhes' });
+    fireEvent.click(closeBtn);
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+    expect(document.activeElement).toBe(menuSummary);
+  });
+
   it('12. Acesso direto às rotas antigas de detalhes (/kanban/tarefas/:id) continua funcionando', async () => {
     render(
       <MemoryRouter initialEntries={['/kanban/tarefas/1']}>
@@ -391,5 +454,74 @@ describe('Integração do Modal de Detalhes no Kanban (Fase 4)', () => {
     expect(await screen.findByText('Voltar ao Kanban')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Entrega Pessoal 1' })).toBeInTheDocument();
     expect(screen.getAllByText('Descrição detalhada da tarefa Entrega Pessoal 1.').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('13. Modal de detalhes no Kanban: criador original abre pop-ups de edição e cancelamento empilhados sobre o modal, e não criador não visualiza botões', async () => {
+    // 1. Testa como não criador: botões não são visíveis
+    auth.user = { id: 'non-creator-user', role: { code: 'MANAGER' } };
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/kanban']}>
+        <KanbanPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole('heading', { name: 'Entrega Pessoal 1' });
+    fireEvent.click(screen.getByRole('link', { name: 'Abrir tarefa #1: Entrega Pessoal 1' }));
+
+    let modal = await screen.findByRole('dialog');
+    expect(within(modal).queryByRole('button', { name: 'Mais ações' })).not.toBeInTheDocument();
+    expect(within(modal).queryByRole('button', { name: 'Editar tarefa' })).not.toBeInTheDocument();
+    expect(within(modal).queryByRole('button', { name: 'Cancelar tarefa' })).not.toBeInTheDocument();
+
+    unmount();
+
+    // 2. Testa como criador original (creator-1): menu Mais ações exibe opções e pop-up abre empilhado
+    auth.user = { id: 'creator-1', role: { code: 'MANAGER' } };
+
+    render(
+      <MemoryRouter initialEntries={['/kanban']}>
+        <KanbanPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole('heading', { name: 'Entrega Pessoal 1' });
+    fireEvent.click(screen.getByRole('link', { name: 'Abrir tarefa #1: Entrega Pessoal 1' }));
+
+    modal = await screen.findByRole('dialog');
+    const moreActionsBtn = within(modal).getByRole('button', { name: 'Mais ações' });
+    expect(moreActionsBtn).toBeInTheDocument();
+    fireEvent.click(moreActionsBtn);
+
+    const editBtn = within(modal).getByRole('button', { name: 'Editar tarefa' });
+    const cancelBtn = within(modal).getByRole('button', { name: 'Cancelar tarefa' });
+    expect(editBtn).toBeInTheDocument();
+    expect(cancelBtn).toBeInTheDocument();
+
+    // Clica no botão "Editar tarefa": abre o pop-up de edição empilhado sobre o modal
+    fireEvent.click(editBtn);
+    const editPopup = await screen.findByRole('dialog', { name: 'Editar tarefa' });
+    expect(editPopup).toBeInTheDocument();
+
+    // Pressiona Escape: fecha apenas o pop-up de edição, mantendo o modal principal aberto
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Editar tarefa' })).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    // Reabre menu e clica no botão "Cancelar tarefa": abre o pop-up de confirmação empilhado
+    fireEvent.click(within(modal).getByRole('button', { name: 'Mais ações' }));
+    fireEvent.click(within(modal).getByRole('button', { name: 'Cancelar tarefa' }));
+    const cancelPopup = await screen.findByRole('dialog', { name: 'Cancelar tarefa' });
+    expect(cancelPopup).toBeInTheDocument();
+    expect(cancelPopup).toHaveTextContent(/Tem certeza de que deseja cancelar a tarefa #1/);
+
+    // Fecha o cancelamento via botão "Voltar"
+    fireEvent.click(within(cancelPopup).getByRole('button', { name: 'Voltar' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Cancelar tarefa' })).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 });

@@ -1,6 +1,8 @@
 import {
   Activity,
   AlertCircle,
+  ChevronDown,
+  ChevronUp,
   FileText,
   Loader2,
   Lock,
@@ -238,33 +240,50 @@ export function TaskActivitiesTimeline({ task }: { task: any }) {
     }
   };
 
+  const [showAllActivities, setShowAllActivities] = useState(false);
+
   const charsRemaining = 2000 - commentText.length;
   const isOverLimit = charsRemaining < 0;
+
+  const displayedItems = showAllActivities || items.length <= 5 ? items : items.slice(-5);
 
   return (
     <section
       aria-label="Comentários e Atividades"
-      className="rounded-xl border border-border bg-white p-4 sm:p-5 shadow-xs"
+      className="rounded-xl border border-border bg-white p-3.5 sm:p-4 shadow-2xs"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/80 pb-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/80 pb-2.5">
         <div className="flex items-center gap-2">
-          <MessageSquare size={18} className="text-brand-700" />
-          <h3 className="text-base font-extrabold text-text">Comentários e Atividades</h3>
+          <MessageSquare size={17} className="text-brand-700" />
+          <h3 className="text-sm font-extrabold text-text">Comentários e Atividades</h3>
         </div>
-        <span className="text-xs text-muted">
-          {items.length === 1 ? '1 registro' : `${items.length} registros`}
-        </span>
+        <div className="flex items-center gap-2">
+          {items.length > 5 && (
+            <button
+              type="button"
+              onClick={() => setShowAllActivities((prev) => !prev)}
+              className="text-xs font-semibold text-brand-700 hover:text-brand-900 inline-flex items-center gap-1 cursor-pointer select-none"
+              aria-expanded={showAllActivities}
+            >
+              <span>{showAllActivities ? 'Mostrar recentes' : `Exibir todas (${items.length})`}</span>
+              {showAllActivities ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            </button>
+          )}
+          <span className="text-xs text-muted">
+            {items.length === 1 ? '1 registro' : `${items.length} registros`}
+          </span>
+        </div>
       </div>
 
       {/* Linha do tempo vertical: estruturalmente idêntica no Desktop e Mobile */}
-      <div className="mt-4">
+      <div className="mt-3">
         {items.length === 0 ? (
-          <p className="py-4 text-center text-xs text-muted italic">
+          <p className="py-3 text-center text-xs text-muted italic">
             Nenhuma atividade ou comentário registrado para esta tarefa ainda.
           </p>
         ) : (
-          <div className="relative border-l-2 border-slate-200 ml-4 pl-4 sm:ml-5 sm:pl-5 space-y-4">
-            {items.map((item) => {
+          <div className="relative border-l-2 border-slate-200 ml-3.5 pl-3.5 sm:ml-4 sm:pl-4 space-y-2.5">
+            {displayedItems.map((item) => {
               const isComment = item.type === 'comment';
               const isNote = item.type === 'note';
 
@@ -273,25 +292,25 @@ export function TaskActivitiesTimeline({ task }: { task: any }) {
                   {/* Ponto / Ícone na linha do tempo */}
                   <span
                     aria-hidden="true"
-                    className={`absolute -left-[27px] sm:-left-[31px] top-0 flex size-6 sm:size-7 items-center justify-center rounded-full border shadow-xs ${
+                    className={`absolute -left-[24px] sm:-left-[26px] top-0.5 flex size-5 sm:size-6 items-center justify-center rounded-full border shadow-2xs ${
                       isComment
-                        ? 'bg-blue-100 text-blue-700 border-blue-300 font-bold text-[10px]'
+                        ? 'bg-blue-100 text-blue-700 border-blue-300 font-bold text-[9px]'
                         : isNote
-                          ? 'bg-amber-100 text-amber-700 border-amber-300 font-bold text-[10px]'
-                          : 'bg-slate-100 text-slate-600 border-slate-300 text-[10px]'
+                          ? 'bg-amber-100 text-amber-700 border-amber-300 font-bold text-[9px]'
+                          : 'bg-slate-100 text-slate-600 border-slate-300 text-[9px]'
                     }`}
                   >
                     {isComment ? (
                       getInitials(item.authorName)
                     ) : isNote ? (
-                      <FileText size={12} className="text-amber-700" />
+                      <FileText size={11} className="text-amber-700" />
                     ) : (
-                      <Activity size={12} className="text-slate-600" />
+                      <Activity size={11} className="text-slate-600" />
                     )}
                   </span>
 
                   {/* Conteúdo da mensagem / evento */}
-                  <div className="flex flex-col gap-1 min-w-0">
+                  <div className="flex flex-col gap-0.5 min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                       <span className="font-bold text-xs text-text truncate">{item.authorName}</span>
                       {isComment ? (
@@ -311,7 +330,7 @@ export function TaskActivitiesTimeline({ task }: { task: any }) {
                     </div>
 
                     <div
-                      className={`mt-1 rounded-xl p-3 text-xs leading-relaxed ${
+                      className={`mt-1 rounded-xl p-2.5 sm:p-3 text-xs leading-relaxed ${
                         isComment
                           ? 'bg-blue-50/50 border border-blue-100 text-slate-800 whitespace-pre-wrap font-normal'
                           : isNote

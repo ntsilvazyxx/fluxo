@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { ArrowLeft, CalendarClock, Check, Clock3, Download, Pencil, RotateCcw, Timer, Trash2, UserRound, X } from 'lucide-react';
+import { ArrowLeft, CalendarClock, Check, Clock3, Download, ExternalLink, Link2, Pencil, RotateCcw, Timer, Trash2, UserRound, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.tsx';
@@ -65,6 +65,10 @@ export function TaskDetailPage() {
   const cycle = task.cycles.find((item) => item.id === currentCycle.id);
   const currentAssignment = cycle?.assignments.find((item) => !item.endedAt);
   const own = currentAssignment?.userId === user.id;
+  const isCreator = Boolean(
+    (task?.createdById && task.createdById === user.id) ||
+    (task?.createdBy?.id && task.createdBy.id === user.id)
+  );
   const pending = cycle?.requests.find((item) => item.status === 'PENDING');
   const policy = currentCycle.deadlinePolicy;
 
@@ -77,6 +81,22 @@ export function TaskDetailPage() {
             <p className="text-sm font-bold text-brand-700">Tarefa #{task.publicNumber} · Ciclo {currentCycle.cycleNumber}</p>
             <h1 className="mt-2 text-3xl font-extrabold">{currentCycle.title}</h1>
             <p className="mt-3 max-w-3xl whitespace-pre-wrap text-muted">{currentCycle.description}</p>
+            {task.sigadocProcessNumber && task.sigadocProcessLink && (
+              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-border/80 bg-slate-50 p-2.5 sm:px-3 text-xs">
+                <Link2 size={16} className="text-brand-700 shrink-0" />
+                <span className="font-bold text-muted">Processo SIGADOC:</span>
+                <span className="font-bold text-text">{task.sigadocProcessNumber}</span>
+                <a
+                  href={task.sigadocProcessLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-auto inline-flex items-center gap-1 font-bold text-brand-700 hover:text-brand-900"
+                >
+                  <span>Abrir processo</span>
+                  <ExternalLink size={13} />
+                </a>
+              </div>
+            )}
           </div>
           <div className="flex gap-2"><StatusBadge status={currentCycle.status} /><PriorityBadge priority={currentCycle.priority} /></div>
         </div>
@@ -115,9 +135,9 @@ export function TaskDetailPage() {
         {own && currentCycle.status === 'IN_PROGRESS' && !pending && <Action title="Solicitações"><RequestActions busy={busy} version={currentCycle.version} taskId={id} mutate={mutate} policy={policy} /></Action>}
         {pending && <Action title="Solicitação pendente"><p className="text-sm text-muted">{pending.type === 'RETURN' ? 'Devolução' : 'Prorrogação'} solicitada em {localeDate(pending.createdAt)}.</p><p className="text-sm">{pending.reason}</p>{pending.proposedDeadlineAt && <p className="mt-2 text-xs">Novo vencimento proposto: {localeDate(pending.proposedDeadlineAt)}</p>}{canManage && <DecisionActions requestItem={pending} version={currentCycle.version} busy={busy} mutate={mutate} requireReason={user.role.code === 'ADMIN_MASTER'} />}</Action>}
         {own && currentCycle.status === 'IN_PROGRESS' && pending?.type !== 'RETURN' && <Action title="Concluir tarefa"><TextAction label="Descrição dos resultados" button="Concluir tarefa" busy={busy} onSubmit={(completionText) => mutate(`/tasks/${id}/complete`, { expectedVersion: currentCycle.version, completionText })} /></Action>}
-        {canManage && ['PENDING', 'AWAITING_ACCEPTANCE', 'IN_PROGRESS'].includes(currentCycle.status) && <Action title={currentAssignment ? 'Reatribuir responsável' : 'Atribuir responsável'}><AssignmentForm users={users} version={currentCycle.version} busy={busy} policy={policy} onSubmit={(data) => mutate(`/tasks/${id}/assignments`, data)} /></Action>}
-        {canManage && ['PENDING', 'AWAITING_ACCEPTANCE', 'IN_PROGRESS'].includes(currentCycle.status) && <Action title="Editar tarefa"><EditForm cycle={currentCycle} busy={busy} onSubmit={(data) => mutate(`/tasks/${id}`, data, 'PATCH')} /></Action>}
-        {canManage && ['PENDING', 'AWAITING_ACCEPTANCE', 'IN_PROGRESS'].includes(currentCycle.status) && <Action title="Cancelar tarefa"><ReasonAction label="Cancelar definitivamente" danger busy={busy} onSubmit={(reason) => mutate(`/tasks/${id}/cancel`, { expectedVersion: currentCycle.version, reason })} /></Action>}
+        {canManage && ['PENDING', 'AWAITING_ACCEPTANCE', 'IN_PROGRESS'].includes(currentCycle.status) && <Action title={currentAssignment ? 'Reatribuir responsável' : 'Atribuir responsável'}><AssignmentForm users={users} version={currentCycle.version} busy={busy} policy={policy} isReassignment={Boolean(currentAssignment)} onSubmit={(data) => mutate(`/tasks/${id}/assignments`, data)} /></Action>}
+        {isCreator && ['PENDING', 'AWAITING_ACCEPTANCE', 'IN_PROGRESS'].includes(currentCycle.status) && <Action title="Editar tarefa"><EditForm cycle={currentCycle} task={task} busy={busy} onSubmit={(data) => mutate(`/tasks/${id}`, data, 'PATCH')} /></Action>}
+        {isCreator && ['PENDING', 'AWAITING_ACCEPTANCE', 'IN_PROGRESS'].includes(currentCycle.status) && <Action title="Cancelar tarefa"><ReasonAction label="Cancelar definitivamente" danger busy={busy} onSubmit={(reason) => mutate(`/tasks/${id}/cancel`, { expectedVersion: currentCycle.version, reason })} /></Action>}
       </div>
       <RequestHistory cycle={cycle} />
       <div className="mt-7">
@@ -433,7 +453,7 @@ function TextAction({ label, button, onSubmit, busy }) {
     </form>
   );
 }
-function AssignmentForm({ users, version, onSubmit, busy, policy }) {
+function AssignmentForm({ users, version, onSubmit, busy, policy, isReassignment = false }) {
   return (
     <form onSubmit={(event) => {
       event.preventDefault();
@@ -479,8 +499,18 @@ function AssignmentForm({ users, version, onSubmit, busy, policy }) {
           <input aria-label="Prazo" name="deadlineAt" type="datetime-local" required className="field" />
         </Field>
       )}
-      <textarea aria-label="Justificativa" name="reason" placeholder="Justificativa (obrigatória na reatribuição ou intervenção)" minLength={5} className="field" />
-      <button disabled={busy} className="action-primary"><UserRound size={18} />Confirmar atribuição</button>
+      <textarea
+        aria-label="Justificativa"
+        name="reason"
+        placeholder={isReassignment ? 'Justificativa da reatribuição (obrigatória)' : 'Justificativa (opcional)'}
+        required={isReassignment}
+        minLength={isReassignment ? 5 : undefined}
+        className="field"
+      />
+      <button disabled={busy} className="action-primary">
+        <UserRound size={18} />
+        {isReassignment ? 'Confirmar reatribuição' : 'Confirmar atribuição'}
+      </button>
     </form>
   );
 }
@@ -492,9 +522,32 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </label>
   );
 }
-function EditForm({ cycle, onSubmit, busy }) {
+function EditForm({ cycle, task, onSubmit, busy }) {
   return (
-    <form onSubmit={(event) => { event.preventDefault(); onSubmit({ ...Object.fromEntries(new FormData(event.currentTarget)), expectedVersion: cycle.version }); }} className="space-y-3">
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        const raw = Object.fromEntries(new FormData(event.currentTarget));
+        const num = String(raw.sigadocProcessNumber || '').trim();
+        const link = String(raw.sigadocProcessLink || '').trim();
+        const data: any = {
+          title: String(raw.title || '').trim(),
+          description: String(raw.description || '').trim(),
+          priority: raw.priority,
+          reason: String(raw.reason || '').trim(),
+          expectedVersion: cycle.version,
+        };
+        if (num && link) {
+          data.sigadocProcessNumber = num;
+          data.sigadocProcessLink = link;
+        } else if (task?.sigadocProcessNumber || task?.sigadocProcessLink) {
+          data.sigadocProcessNumber = null;
+          data.sigadocProcessLink = null;
+        }
+        onSubmit(data);
+      }}
+      className="space-y-3"
+    >
       <input aria-label="Título" name="title" defaultValue={cycle.title} required className="field" />
       <textarea aria-label="Descrição" name="description" defaultValue={cycle.description} required className="field" />
       <select aria-label="Prioridade" name="priority" defaultValue={cycle.priority} className="field">
@@ -503,6 +556,24 @@ function EditForm({ cycle, onSubmit, busy }) {
         <option value="HIGH">Alta</option>
         <option value="URGENT">Urgente</option>
       </select>
+      <div className="rounded-xl border border-border/80 bg-slate-50/50 p-2.5 space-y-2">
+        <p className="text-xs font-bold text-muted uppercase">Processo SIGADOC (opcional)</p>
+        <input
+          aria-label="Número do processo SIGADOC"
+          name="sigadocProcessNumber"
+          defaultValue={task?.sigadocProcessNumber || ''}
+          placeholder="Número do processo SIGADOC"
+          className="field text-xs"
+        />
+        <input
+          aria-label="Link do processo SIGADOC"
+          type="url"
+          name="sigadocProcessLink"
+          defaultValue={task?.sigadocProcessLink || ''}
+          placeholder="https://..."
+          className="field text-xs"
+        />
+      </div>
       <textarea aria-label="Justificativa" name="reason" placeholder="Justificativa da alteração" required minLength={5} className="field" />
       <button disabled={busy} className="action-secondary"><Pencil size={18} />Salvar alterações</button>
     </form>

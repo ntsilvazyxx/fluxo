@@ -17,4 +17,48 @@ it('serializa aceite versus reatribuição',async()=>{const task=await createTas
 it('rejeição encerra atribuição, limpa prazo e preserva motivo',async()=>{const task=await createTask();const assigned=(await assign(task)).body.data.task;const r=await request(app).post(`/api/v1/assignments/${assigned.cycle.assignment.id}/reject`).set('authorization',`Bearer ${techToken}`).set('idempotency-key',randomUUID()).send({expectedVersion:assigned.cycle.version,reason:'Não possuo competência técnica para esta entrega'});assert.equal(r.status,200);assert.equal(r.body.data.task.cycle.status,'PENDING');assert.equal(r.body.data.task.cycle.deadlineAt,null)});
 it('serializa conclusão versus cancelamento e proíbe conclusão alheia',async()=>{const task=await createTask();const assigned=(await assign(task)).body.data.task;const accepted=(await request(app).post(`/api/v1/assignments/${assigned.cycle.assignment.id}/accept`).set('authorization',`Bearer ${techToken}`).set('idempotency-key',randomUUID()).send({expectedVersion:assigned.cycle.version})).body.data.task;const forbidden=await request(app).post(`/api/v1/tasks/${task.id}/complete`).set('authorization',`Bearer ${otherToken}`).set('idempotency-key',randomUUID()).send({expectedVersion:accepted.cycle.version,completionText:'Resultado indevido não autorizado'});assert.equal(forbidden.status,409);const complete=request(app).post(`/api/v1/tasks/${task.id}/complete`).set('authorization',`Bearer ${techToken}`).set('idempotency-key',randomUUID()).send({expectedVersion:accepted.cycle.version,completionText:'Relatório final revisado e entregue'});const cancel=request(app).post(`/api/v1/tasks/${task.id}/cancel`).set('authorization',`Bearer ${managerToken}`).set('idempotency-key',randomUUID()).send({expectedVersion:accepted.cycle.version,reason:'Mudança institucional devidamente registrada'});const results=await Promise.all([complete,cancel]);assert.deepEqual(results.map(r=>r.status).sort(),[200,409])});
 it('replay idempotente devolve a mesma tarefa sem duplicar',async()=>{const idempotency=randomUUID(),payload=runningTaskInput(team.id,tech.id);const make=()=>request(app).post('/api/v1/tasks').set('authorization',`Bearer ${managerToken}`).set('idempotency-key',idempotency).send(payload);const first=await make(),second=await make();assert.equal(first.status,201);assert.equal(second.status,201);assert.equal(second.headers['idempotency-replayed'],'true');assert.equal(first.body.data.task.id,second.body.data.task.id)});
+it('somente o criador original pode editar ou cancelar a tarefa (403 para não criadores)',async()=>{
+  const task = await createTask('Tarefa de Autoria Estrita');
+  // Criada por manager (managerToken).
+  // 1. Secretário tenta editar: 403 FORBIDDEN
+  const editBySecretary = await request(app).patch(`/api/v1/tasks/${task.id}`).set('authorization',`Bearer ${secretaryToken}`).send({
+    title: 'Tentativa indevida de edição',
+    expectedVersion: task.cycle.version,
+    reason: 'Alteração por secretário não criador',
+  });
+  assert.equal(editBySecretary.status, 403);
+  assert.equal(editBySecretary.body.error?.code, 'FORBIDDEN');
+
+  // 2. Secretário tenta cancelar: 403 FORBIDDEN
+  const cancelBySecretary = await request(app).post(`/api/v1/tasks/${task.id}/cancel`).set('authorization',`Bearer ${secretaryToken}`).send({
+    expectedVersion: task.cycle.version,
+    reason: 'Tentativa indevida de cancelamento',
+  });
+  assert.equal(cancelBySecretary.status, 403);
+  assert.equal(cancelBySecretary.body.error?.code, 'FORBIDDEN');
+
+  // 3. Técnico responsável tenta cancelar: 403 FORBIDDEN
+  const cancelByTech = await request(app).post(`/api/v1/tasks/${task.id}/cancel`).set('authorization',`Bearer ${techToken}`).send({
+    expectedVersion: task.cycle.version,
+    reason: 'Técnico tentando cancelar',
+  });
+  assert.equal(cancelByTech.status, 403);
+
+  // 4. Criador original (managerToken) consegue editar com sucesso
+  const editByCreator = await request(app).patch(`/api/v1/tasks/${task.id}`).set('authorization',`Bearer ${managerToken}`).send({
+    title: 'Título atualizado pelo criador',
+    expectedVersion: task.cycle.version,
+    reason: 'Atualização autorizada pelo criador original',
+  });
+  assert.equal(editByCreator.status, 200);
+  assert.equal(editByCreator.body.data.task.cycle.title, 'Título atualizado pelo criador');
+
+  // 5. Criador original consegue cancelar com sucesso
+  const cancelByCreator = await request(app).post(`/api/v1/tasks/${task.id}/cancel`).set('authorization',`Bearer ${managerToken}`).send({
+    expectedVersion: editByCreator.body.data.task.cycle.version,
+    reason: 'Cancelamento autorizado pelo criador original',
+  });
+  assert.equal(cancelByCreator.status, 200);
+  assert.equal(cancelByCreator.body.data.task.cycle.status, 'CANCELLED');
+});
 });

@@ -305,5 +305,56 @@ describe('chat de comentários e atividades (TaskComment)', () => {
 
     assert.equal(first.id, second.id);
   });
+
+  it('8. valida schemas Zod de listagem e criação de comentários com suporte a safeParse', async () => {
+    const { listCommentsSchema, createCommentSchema } = await import(
+      '../../src/modules/comments/comment.schemas.js'
+    );
+
+    // Validação de listagem
+    assert.equal(typeof listCommentsSchema.safeParse, 'function');
+    const validList = listCommentsSchema.safeParse({
+      params: { id: '11111111-1111-4111-8111-111111111111' },
+      query: {},
+      body: {},
+    });
+    assert.equal(validList.success, true);
+
+    const invalidList = listCommentsSchema.safeParse({
+      params: { id: 'not-a-uuid' },
+      query: {},
+      body: {},
+    });
+    assert.equal(invalidList.success, false);
+
+    // Validação de criação
+    assert.equal(typeof createCommentSchema.safeParse, 'function');
+    const validCreate = createCommentSchema.safeParse({
+      params: { id: '11111111-1111-4111-8111-111111111111' },
+      query: {},
+      body: {
+        content: 'Comentário válido',
+        clientMessageId: 'msg-valid-123',
+      },
+    });
+    assert.equal(validCreate.success, true);
+
+    // Rejeita conteúdo vazio
+    const emptyCreate = createCommentSchema.safeParse({
+      params: { id: '11111111-1111-4111-8111-111111111111' },
+      query: {},
+      body: { content: '   ' },
+    });
+    assert.equal(emptyCreate.success, false);
+
+    // Rejeita conteúdo maior que 2000 caracteres
+    const tooLong = createCommentSchema.safeParse({
+      params: { id: '11111111-1111-4111-8111-111111111111' },
+      query: {},
+      body: { content: 'a'.repeat(2001) },
+    });
+    assert.equal(tooLong.success, false);
+  });
 });
+
 

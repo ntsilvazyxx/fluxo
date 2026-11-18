@@ -13,7 +13,7 @@ describe('painel de ciclos', () => {
     render(<MemoryRouter><TaskLifecyclePanel task={activeTask} cycle={{ ...activeTask.cycles[0], version: 2 }} canManage={false} busy={false} mutate={vi.fn()} /></MemoryRouter>);
     expect(screen.queryByText(/subtarefa/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/conclusão da tarefa principal está bloqueada/i)).not.toBeInTheDocument();
-    expect(screen.getByText('Ciclos de execução')).toBeInTheDocument();
+    expect(screen.getByText('Percurso da tarefa')).toBeInTheDocument();
   });
 
   it('exige justificativa e aciona a reabertura de ciclo concluído', () => {

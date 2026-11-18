@@ -1,4 +1,20 @@
-import { CalendarClock, Check, Clock3, Download, Pencil, RotateCcw, Timer, Trash2, UserRound, X } from 'lucide-react';
+import {
+  CalendarClock,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Clock3,
+  Download,
+  Paperclip,
+  Pencil,
+  RotateCcw,
+  Send,
+  Timer,
+  Trash2,
+  UserRound,
+  UserRoundCog,
+  X,
+} from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 
 export const key = () => crypto.randomUUID();
@@ -225,12 +241,18 @@ export function AssignmentForm({
   onSubmit,
   busy,
   policy,
+  isReassignment = false,
+  onCancel,
+  submitLabel,
 }: {
   users: any[];
   version: number;
   onSubmit: (data: any) => void;
   busy: boolean;
   policy: string;
+  isReassignment?: boolean;
+  onCancel?: () => void;
+  submitLabel?: string;
 }) {
   return (
     <form
@@ -249,7 +271,7 @@ export function AssignmentForm({
       className="space-y-3"
     >
       <select aria-label="Responsável" name="userId" required className="field">
-        <option value="">Selecione o responsável</option>
+        <option value="">{isReassignment ? 'Selecione o novo responsável' : 'Selecione o responsável'}</option>
         {users
           .filter((item) => item.isActive)
           .map((item) => (
@@ -289,14 +311,36 @@ export function AssignmentForm({
       <textarea
         aria-label="Justificativa"
         name="reason"
-        placeholder="Justificativa (obrigatória na reatribuição ou intervenção)"
-        minLength={5}
+        placeholder={
+          isReassignment
+            ? 'Justificativa da reatribuição (obrigatória)'
+            : 'Justificativa (opcional)'
+        }
+        required={isReassignment}
+        minLength={isReassignment ? 5 : undefined}
         className="field"
       />
-      <button disabled={busy} className="action-primary">
-        <UserRound size={18} />
-        Confirmar atribuição
-      </button>
+      {onCancel ? (
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-border">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onCancel}
+            className="action-secondary"
+          >
+            Voltar
+          </button>
+          <button disabled={busy} className="action-primary">
+            {isReassignment ? <UserRoundCog size={18} /> : <Send size={18} />}
+            {submitLabel ?? (isReassignment ? 'Confirmar reatribuição' : 'Confirmar encaminhamento')}
+          </button>
+        </div>
+      ) : (
+        <button disabled={busy} className="action-primary">
+          <UserRound size={18} />
+          {submitLabel ?? (isReassignment ? 'Confirmar reatribuição' : 'Confirmar atribuição')}
+        </button>
+      )}
     </form>
   );
 }
@@ -421,6 +465,7 @@ export function TaskAttachmentsPanel({
   const [downloading, setDownloading] = useState<string | null>(null);
   const [removing, setRemoving] = useState<any>(null);
   const [removeReason, setRemoveReason] = useState('');
+  const [isExpanded, setIsExpanded] = useState(true);
 
   useEffect(() => {
     request(`/task-uploads/tasks/${taskId}`)
@@ -513,116 +558,131 @@ export function TaskAttachmentsPanel({
   const execution = attachments.filter((a) => a.origin === 'EXECUTION');
 
   return (
-    <section className="rounded-xl border border-border bg-white p-4" aria-labelledby="task-attachments-title">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 id="task-attachments-title" className="text-base font-bold text-text">
-            Anexos da tarefa
+    <section className="rounded-xl border border-border bg-white p-3.5 sm:p-4 shadow-2xs" aria-labelledby="task-attachments-title">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Paperclip size={17} className="text-brand-700" />
+          <h3 id="task-attachments-title" className="text-sm font-extrabold text-text">
+            Anexos da tarefa ({attachments.length})
           </h3>
-          <p className="mt-0.5 text-xs text-muted">Arquivos vinculados ao ciclo de execução.</p>
         </div>
+        <button
+          type="button"
+          onClick={() => setIsExpanded((prev) => !prev)}
+          className="text-xs font-semibold text-brand-700 hover:text-brand-900 inline-flex items-center gap-1 cursor-pointer select-none"
+          aria-expanded={isExpanded}
+        >
+          <span>{isExpanded ? 'Recolher' : 'Expandir'}</span>
+          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
       </div>
 
-      {own && status === 'IN_PROGRESS' && policy === 'RUNNING_CLOCK' && (
-        <div className="mt-4 rounded-xl border border-dashed border-brand-700 bg-brand-100/40 p-3.5">
-          <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-border bg-white px-3.5 py-2 text-xs font-semibold hover:bg-brand-50 focus-within:ring-2 focus-within:ring-brand-700">
-            <span>Selecionar arquivos de execução</span>
-            <input
-              className="sr-only"
-              type="file"
-              multiple
-              accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx"
-              onChange={selectFiles}
-              disabled={uploading}
-            />
-          </label>
-          <p className="mt-1.5 text-xs text-muted">Formatos aceitos: JPG, JPEG, PNG, WEBP, PDF, DOC, DOCX.</p>
-          {files.length > 0 && (
-            <div className="mt-2.5 grid gap-2 sm:grid-cols-3">
-              {files.map((file: File) => (
-                <article key={file.name} className="overflow-hidden rounded-lg border border-border bg-white p-2">
-                  <span className="text-xs font-bold truncate block">{file.name}</span>
-                  {progress[file.name] != null && <span className="text-xs text-muted">({progress[file.name]}%)</span>}
-                </article>
-              ))}
+      {isExpanded && (
+        <div className="mt-3 space-y-3">
+          <p className="text-xs text-muted">Arquivos vinculados ao ciclo de execução.</p>
+
+          {own && status === 'IN_PROGRESS' && policy === 'RUNNING_CLOCK' && (
+            <div className="rounded-xl border border-dashed border-brand-700 bg-brand-100/40 p-3.5">
+              <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-border bg-white px-3.5 py-2 text-xs font-semibold hover:bg-brand-50 focus-within:ring-2 focus-within:ring-brand-700">
+                <span>Selecionar arquivos de execução</span>
+                <input
+                  className="sr-only"
+                  type="file"
+                  multiple
+                  accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx"
+                  onChange={selectFiles}
+                  disabled={uploading}
+                />
+              </label>
+              <p className="mt-1.5 text-xs text-muted">Formatos aceitos: JPG, JPEG, PNG, WEBP, PDF, DOC, DOCX.</p>
+              {files.length > 0 && (
+                <div className="mt-2.5 grid gap-2 sm:grid-cols-3">
+                  {files.map((file: File) => (
+                    <article key={file.name} className="overflow-hidden rounded-lg border border-border bg-white p-2">
+                      <span className="text-xs font-bold truncate block">{file.name}</span>
+                      {progress[file.name] != null && <span className="text-xs text-muted">({progress[file.name]}%)</span>}
+                    </article>
+                  ))}
+                </div>
+              )}
+              <button type="button" disabled={uploading} onClick={sendFiles} className="action-primary mt-3 text-xs">
+                <span>Enviar anexos de execução ({files.length})</span>
+              </button>
             </div>
           )}
-          <button type="button" disabled={uploading} onClick={sendFiles} className="action-primary mt-3 text-xs">
-            <span>Enviar anexos de execução ({files.length})</span>
-          </button>
+
+          {attachmentsError && <p role="alert" className="rounded-lg bg-red-50 p-2.5 text-xs text-danger">{attachmentsError}</p>}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {initial.length > 0 && (
+              <section className="rounded-lg border border-border bg-slate-50/50 p-3">
+                <h4 className="text-xs font-bold text-brand-700 mb-2">Anexos iniciais</h4>
+                <div className="space-y-1.5">
+                  {initial.map((item) => (
+                    <article key={item.id} className="flex items-center justify-between gap-2 p-2 rounded-md border border-border bg-white text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <button
+                          type="button"
+                          disabled={downloading === item.id}
+                          aria-label={`Baixar ${item.originalName}`}
+                          onClick={() => download(item)}
+                          className="text-muted hover:text-brand-700 shrink-0"
+                        >
+                          <Download size={14} />
+                        </button>
+                        <span className="truncate font-medium">{item.originalName}</span>
+                      </div>
+                      <span className="text-[11px] text-muted shrink-0">{Math.round(item.sizeBytes / 1024)} KB</span>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+            {execution.length > 0 && (
+              <section className="rounded-lg border border-border bg-slate-50/50 p-3">
+                <h4 className="text-xs font-bold text-brand-700 mb-2">Anexos de execução</h4>
+                <div className="space-y-1.5">
+                  {execution.map((item) => (
+                    <article key={item.id} className="flex items-center justify-between gap-2 p-2 rounded-md border border-border bg-white text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <button
+                          type="button"
+                          disabled={downloading === item.id}
+                          aria-label={`Baixar ${item.originalName}`}
+                          onClick={() => download(item)}
+                          className="text-muted hover:text-brand-700 shrink-0"
+                        >
+                          <Download size={14} />
+                        </button>
+                        <span className="truncate font-medium">{item.originalName}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[11px] text-muted">{Math.round(item.sizeBytes / 1024)} KB</span>
+                        {own && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRemoving(item);
+                              setRemoveReason('');
+                            }}
+                            className="text-danger hover:text-red-700 font-semibold"
+                            title="Remover anexo"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+            {initial.length === 0 && execution.length === 0 && (
+              <p className="mt-2 text-xs text-muted sm:col-span-2">Nenhum arquivo anexado a este ciclo.</p>
+            )}
+          </div>
         </div>
       )}
-
-      {attachmentsError && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-2.5 text-xs text-danger">{attachmentsError}</p>}
-
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        {initial.length > 0 && (
-          <section className="rounded-lg border border-border bg-slate-50/50 p-3">
-            <h4 className="text-xs font-bold text-brand-700 mb-2">Anexos iniciais</h4>
-            <div className="space-y-1.5">
-              {initial.map((item) => (
-                <article key={item.id} className="flex items-center justify-between gap-2 p-2 rounded-md border border-border bg-white text-xs">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <button
-                      type="button"
-                      disabled={downloading === item.id}
-                      aria-label={`Baixar ${item.originalName}`}
-                      onClick={() => download(item)}
-                      className="text-muted hover:text-brand-700 shrink-0"
-                    >
-                      <Download size={14} />
-                    </button>
-                    <span className="truncate font-medium">{item.originalName}</span>
-                  </div>
-                  <span className="text-[11px] text-muted shrink-0">{Math.round(item.sizeBytes / 1024)} KB</span>
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
-        {execution.length > 0 && (
-          <section className="rounded-lg border border-border bg-slate-50/50 p-3">
-            <h4 className="text-xs font-bold text-brand-700 mb-2">Anexos de execução</h4>
-            <div className="space-y-1.5">
-              {execution.map((item) => (
-                <article key={item.id} className="flex items-center justify-between gap-2 p-2 rounded-md border border-border bg-white text-xs">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <button
-                      type="button"
-                      disabled={downloading === item.id}
-                      aria-label={`Baixar ${item.originalName}`}
-                      onClick={() => download(item)}
-                      className="text-muted hover:text-brand-700 shrink-0"
-                    >
-                      <Download size={14} />
-                    </button>
-                    <span className="truncate font-medium">{item.originalName}</span>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[11px] text-muted">{Math.round(item.sizeBytes / 1024)} KB</span>
-                    {own && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRemoving(item);
-                          setRemoveReason('');
-                        }}
-                        className="text-danger hover:text-red-700 font-semibold"
-                        title="Remover anexo"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    )}
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
-        {initial.length === 0 && execution.length === 0 && (
-          <p className="mt-2 text-xs text-muted sm:col-span-2">Nenhum arquivo anexado a este ciclo.</p>
-        )}
-      </div>
 
       {removing && (
         <div role="dialog" aria-modal="true" aria-labelledby="remove-attachment-title" className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 p-4">

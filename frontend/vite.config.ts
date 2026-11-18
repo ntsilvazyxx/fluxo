@@ -5,6 +5,12 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   envDir: '..',
   plugins: [react(), tailwindcss()],
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', '@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
+  },
   server: {
     port: 5173,
   },

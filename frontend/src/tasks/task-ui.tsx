@@ -1,6 +1,18 @@
-import { AlertTriangle, CalendarClock, Circle, CircleCheck, Clock3, MoreHorizontal, Palette, RotateCcw, UserRound } from 'lucide-react';
+import {
+  AlertTriangle,
+  CalendarClock,
+  Circle,
+  CircleCheck,
+  Clock3,
+  GripVertical,
+  MoreHorizontal,
+  Palette,
+  RotateCcw,
+  UserRound,
+  X,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { CARD_COLORS, CardColorKey, COLOR_OPTIONS } from './task-colors.ts';
 
 const statusLabels = {
@@ -47,6 +59,7 @@ export function TaskCard({
   color,
   onColorChange,
   onSelect,
+  dragHandleProps,
 }: {
   task: any;
   compact?: boolean;
@@ -54,16 +67,65 @@ export function TaskCard({
   search?: string;
   color?: string;
   onColorChange?: (color: string | null) => void;
-  onSelect?: (task: any) => void;
+  onSelect?: (task: any, trigger?: HTMLElement) => void;
+  dragHandleProps?: Record<string, any>;
 }) {
   const c = task.cycle;
+  const navigate = useNavigate();
   const menu = useRef<HTMLDetailsElement | null>(null);
   const paletteRef = useRef<HTMLDivElement | null>(null);
+  const summaryRef = useRef<HTMLDivElement | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [positionStyle, setPositionStyle] = useState<React.CSSProperties>({});
   const target = `/kanban/tarefas/${task.id}${search}`;
   const colorConfig = CARD_COLORS[(color as CardColorKey) || 'default'] || CARD_COLORS.default;
   const isCustomColor = Boolean(color && color !== 'default' && CARD_COLORS[color as CardColorKey]);
 
+  // Garante que apenas um pop-up permaneça aberto simultaneamente
+  useEffect(() => {
+    const handleCloseOthers = (e: Event) => {
+      const custom = e as CustomEvent<{ id: string; type: string }>;
+      if (custom.detail?.id !== task.id) {
+        setSummaryOpen(false);
+        setPaletteOpen(false);
+      }
+    };
+    window.addEventListener('seaf:close-task-popups', handleCloseOthers);
+    return () => window.removeEventListener('seaf:close-task-popups', handleCloseOthers);
+  }, [task.id]);
+
+  const openSummary = () => {
+    if (menu.current) {
+      menu.current.open = false;
+    }
+    setPaletteOpen(false);
+    setSummaryOpen(true);
+    window.dispatchEvent(
+      new CustomEvent('seaf:close-task-popups', {
+        detail: { id: task.id, type: 'summary' },
+      }),
+    );
+  };
+
+  const togglePalette = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSummaryOpen(false);
+    setPaletteOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        window.dispatchEvent(
+          new CustomEvent('seaf:close-task-popups', {
+            detail: { id: task.id, type: 'palette' },
+          }),
+        );
+      }
+      return next;
+    });
+  };
+
+  // Teclado e clique fora para a paleta
   useEffect(() => {
     if (!paletteOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -84,6 +146,69 @@ export function TaskCard({
     };
   }, [paletteOpen]);
 
+  // Teclado, foco e clique fora para o pop-up compacto de resumo
+  useEffect(() => {
+    if (!summaryOpen) return;
+    const closeBtn = summaryRef.current?.querySelector<HTMLButtonElement>('button[aria-label="Fechar resumo"]');
+    closeBtn?.focus();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setSummaryOpen(false);
+        menu.current?.querySelector('summary')?.focus();
+      }
+    };
+    const onMouseDown = (e: MouseEvent) => {
+      if (summaryRef.current && !summaryRef.current.contains(e.target as Node)) {
+        setSummaryOpen(false);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('mousedown', onMouseDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onMouseDown);
+    };
+  }, [summaryOpen]);
+
+  // Ajuste de posicionamento inteligente para manter o resumo dentro da tela
+  useEffect(() => {
+    if (!summaryOpen || !summaryRef.current) return;
+    const adjustPosition = () => {
+      if (!summaryRef.current) return;
+      const rect = summaryRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      let adjustX = 0;
+      let adjustY = 0;
+
+      if (rect.right > viewportWidth - 8) {
+        adjustX = viewportWidth - 8 - rect.right;
+      } else if (rect.left < 8) {
+        adjustX = 8 - rect.left;
+      }
+
+      if (rect.bottom > viewportHeight - 8) {
+        adjustY = viewportHeight - 8 - rect.bottom;
+      } else if (rect.top < 8) {
+        adjustY = 8 - rect.top;
+      }
+
+      if (adjustX !== 0 || adjustY !== 0) {
+        setPositionStyle({
+          transform: `translate(${adjustX}px, ${adjustY}px)`,
+        });
+      } else {
+        setPositionStyle({});
+      }
+    };
+
+    adjustPosition();
+    window.addEventListener('resize', adjustPosition);
+    return () => window.removeEventListener('resize', adjustPosition);
+  }, [summaryOpen]);
+
   return (
     <article
       data-task-id={task.id}
@@ -101,11 +226,25 @@ export function TaskCard({
         onClick={(e) => {
           if (onSelect) {
             e.preventDefault();
-            onSelect(task);
+            onSelect(task, e.currentTarget);
           }
         }}
       >
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {dragHandleProps && (
+            <button
+              type="button"
+              {...dragHandleProps}
+              aria-label={`Arrastar tarefa #${task.publicNumber}`}
+              className="touch-none cursor-grab active:cursor-grabbing text-muted/70 hover:text-brand-700 p-0.5 -ml-1 rounded hover:bg-black/5 transition-colors focus-visible:outline-2 focus-visible:outline-brand-700"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+            >
+              <GripVertical size={14} />
+            </button>
+          )}
           <span className="text-xs font-bold text-brand-700">#{task.publicNumber}</span>
           <PriorityBadge priority={c.priority} />
         </div>
@@ -145,11 +284,7 @@ export function TaskCard({
               aria-label={`Personalizar cor da tarefa #${task.publicNumber}`}
               aria-expanded={paletteOpen}
               className="grid size-9 cursor-pointer place-items-center rounded-lg text-muted hover:bg-black/5 hover:text-text transition-colors focus-visible:outline-2 focus-visible:outline-brand-700"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setPaletteOpen((prev) => !prev);
-              }}
+              onClick={togglePalette}
             >
               <Palette size={16} />
             </button>
@@ -225,16 +360,41 @@ export function TaskCard({
             <summary
               aria-label={`Ações da tarefa #${task.publicNumber}`}
               className="grid size-9 cursor-pointer list-none place-items-center rounded-lg text-muted hover:bg-black/5 hover:text-text transition-colors"
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                setSummaryOpen(false);
+                setPaletteOpen(false);
+              }}
             >
               <MoreHorizontal size={18} />
             </summary>
             <div className="absolute right-0 top-10 z-20 w-52 rounded-xl border border-border bg-white p-1 shadow-card">
-              <Link className="flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold hover:bg-brand-100" to={target}>
-                Detalhes e histórico
-              </Link>
+              <button
+                type="button"
+                className="flex min-h-11 w-full items-center rounded-lg px-3 text-left text-sm font-semibold hover:bg-brand-100 transition-colors"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  openSummary();
+                }}
+              >
+                Resumo da tarefa
+              </button>
               {personal && ['AWAITING_ACCEPTANCE', 'IN_PROGRESS'].includes(c.status) && (
-                <Link className="flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold hover:bg-brand-100" to={target}>
+                <Link
+                  className="flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold hover:bg-brand-100"
+                  to={target}
+                  onClick={(e) => {
+                    if (menu.current) {
+                      menu.current.open = false;
+                      menu.current.querySelector('summary')?.focus();
+                    }
+                    if (onSelect) {
+                      e.preventDefault();
+                      onSelect(task);
+                    }
+                  }}
+                >
                   {c.status === 'AWAITING_ACCEPTANCE' ? 'Responder atribuição' : 'Execução e solicitações'}
                 </Link>
               )}
@@ -242,6 +402,99 @@ export function TaskCard({
           </details>
         )}
       </div>
+
+      {/* Pop-up compacto de Resumo da tarefa */}
+      {summaryOpen && (
+        <div
+          ref={summaryRef}
+          role="dialog"
+          aria-label={`Resumo da tarefa #${task.publicNumber}`}
+          style={{ width: 300, maxWidth: 'calc(100vw - 24px)', ...positionStyle }}
+          className="absolute right-2 top-10 z-30 rounded-xl border border-border bg-white p-3.5 shadow-card text-left"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Cabeçalho */}
+          <div className="flex items-start justify-between gap-2 border-b border-border/60 pb-2.5">
+            <div className="min-w-0 flex-1">
+              <span className="text-xs font-bold text-brand-700">#{task.publicNumber}</span>
+              <h4 className="mt-0.5 line-clamp-2 text-sm font-bold leading-snug text-text" title={c.title}>
+                {c.title}
+              </h4>
+            </div>
+            <button
+              type="button"
+              aria-label="Fechar resumo"
+              onClick={() => {
+                setSummaryOpen(false);
+                menu.current?.querySelector('summary')?.focus();
+              }}
+              className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-lg text-muted hover:bg-black/5 hover:text-text transition-colors focus-visible:outline-2 focus-visible:outline-brand-700"
+            >
+              <X size={15} />
+            </button>
+          </div>
+
+          {/* Badges de Status e Prioridade */}
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+            <StatusBadge status={c.status} />
+            <PriorityBadge priority={c.priority} />
+          </div>
+
+          {/* Detalhes: Equipe, Responsável, Prazo */}
+          <div className="mt-3 space-y-2 text-xs text-muted">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted/80">Equipe</p>
+              <p className="mt-0.5 font-medium text-text truncate" title={task.team?.name}>
+                {task.team?.name ?? 'Sem equipe'}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted/80">Responsável</p>
+              <p className="mt-0.5 flex items-center gap-1.5 font-medium text-text truncate">
+                <UserRound size={13} className="shrink-0 text-muted" />
+                <span className="truncate">
+                  {c.assignment?.user?.name ?? (personal && c.status === 'COMPLETED' ? 'Concluída por você' : 'Sem responsável atual')}
+                </span>
+              </p>
+            </div>
+
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted/80">Prazo</p>
+              <p className={`mt-0.5 flex items-center gap-1.5 font-medium ${c.overdue ? 'font-bold text-danger' : 'text-text'}`}>
+                {c.overdue ? <AlertTriangle size={13} className="mt-0.5 shrink-0 text-danger" /> : <CalendarClock size={13} className="mt-0.5 shrink-0 text-muted" />}
+                <span>
+                  {c.deadlineAt
+                    ? new Date(c.deadlineAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+                    : 'Sem prazo'}
+                  {c.overdue ? ' · Atrasada' : ''}
+                </span>
+              </p>
+            </div>
+          </div>
+
+          {/* Botão de ação: Ver detalhes completos */}
+          <div className="mt-3.5 border-t border-border/60 pt-2.5">
+            <button
+              type="button"
+              className="flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-brand-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-900 focus-visible:outline-2 focus-visible:outline-brand-700"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const returnTrigger = menu.current?.querySelector('summary') || undefined;
+                setSummaryOpen(false);
+                if (onSelect) {
+                  onSelect(task, returnTrigger);
+                } else {
+                  navigate(target);
+                }
+              }}
+            >
+              Ver detalhes completos
+            </button>
+          </div>
+        </div>
+      )}
     </article>
   );
 }

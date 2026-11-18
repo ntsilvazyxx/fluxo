@@ -12,8 +12,16 @@ export const presentTask = (task) => {
   const cycle = task.currentCycle;
   const assignment = cycle?.assignments?.find((item) => !item.endedAt) ?? null;
   return {
-    id: task.id, publicNumber: String(task.publicNumber), team: task.team ? { id: task.team.id, name: task.team.name } : { id: task.teamId },
-    parentCycleId: task.parentCycleId, createdAt: task.createdAt, updatedAt: task.updatedAt,
+    id: task.id,
+    publicNumber: String(task.publicNumber),
+    team: task.team ? { id: task.team.id, name: task.team.name } : { id: task.teamId },
+    parentCycleId: task.parentCycleId,
+    createdById: task.createdById,
+    createdBy: task.createdBy ? { id: task.createdBy.id, name: task.createdBy.name } : (task.createdById ? { id: task.createdById } : null),
+    sigadocProcessNumber: task.sigadocProcessNumber ?? null,
+    sigadocProcessLink: task.sigadocProcessLink ?? null,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
     cycle: cycle ? { id: cycle.id, cycleNumber: cycle.cycleNumber, title: cycle.title, description: cycle.description, priority: cycle.priority, status: cycle.status, deadlinePolicy: cycle.deadlinePolicy, deadlineAt: activeDeadlineAt(cycle), legacyDeadlineAt: cycle.deadlineAt, acceptanceDurationMinutes: cycle.acceptanceDurationMinutes, executionDurationMinutes: cycle.executionDurationMinutes, acceptanceDeadlineAt: cycle.acceptanceDeadlineAt, executionDeadlineAt: cycle.executionDeadlineAt, version: cycle.version, openedAt: cycle.openedAt, closedAt: cycle.closedAt, completionText: cycle.completionText, overdue: isOverdue(cycle), assignment: presentAssignment(assignment) } : null,
   };
 };

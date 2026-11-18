@@ -1,17 +1,21 @@
 import { z } from 'zod';
 
 const uuid = z.string().uuid('ID inválido.');
+const empty = z.object({});
 
-export const listCommentsSchema = {
+export const listCommentsSchema = z.object({
   params: z.object({
     id: uuid,
   }),
-};
+  query: empty,
+  body: empty,
+});
 
-export const createCommentSchema = {
+export const createCommentSchema = z.object({
   params: z.object({
     id: uuid,
   }),
+  query: empty,
   body: z.object({
     content: z
       .string({ required_error: 'O comentário é obrigatório.' })
@@ -24,5 +28,6 @@ export const createCommentSchema = {
       .max(64, 'Identificador de mensagem do cliente muito longo.')
       .optional(),
   }),
-};
+});
+
 

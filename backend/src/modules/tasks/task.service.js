@@ -15,7 +15,7 @@ export const scopeWhere = (actor) => {
   if (actor.roleCode === 'MANAGER') return { team: { managers: { some: { userId: actor.userId, endedAt: null } } } };
   return { currentCycle: { assignments: { some: { userId: actor.userId, OR: [{ endedAt: null }, { endReason: 'COMPLETED' }] } } } };
 };
-const includeCurrent = { team: true, currentCycle: { include: { assignments: { include: { user: true }, orderBy: { assignedAt: 'desc' } } } } };
+const includeCurrent = { team: true, createdBy: { select: { id: true, name: true } }, currentCycle: { include: { assignments: { include: { user: true }, orderBy: { assignedAt: 'desc' } } } } };
 // LEGACY_CALENDAR depends on the calendar version snapshotted on the assignment.
 // Historical rows may predate that snapshot; their metrics are unavailable, but
 // the task detail must remain readable. Other inconsistencies still fail loudly.
@@ -40,7 +40,7 @@ async function requireManagement(client, request, teamId, reason) {
 async function lockTaskPointer(client, taskId) {
   const initial = await client.task.findFirst({
     where: { id: taskId, deletedAt: null },
-    select: { id: true, teamId: true, parentCycleId: true, currentCycleId: true },
+    select: { id: true, teamId: true, parentCycleId: true, currentCycleId: true, createdById: true },
   });
   if (!initial?.currentCycleId) throw missing();
   let parentCycle = null;
@@ -60,7 +60,7 @@ async function lockTaskPointer(client, taskId) {
   }
   const task = await client.task.findFirst({
     where: { id: taskId, deletedAt: null },
-    select: { id: true, teamId: true, parentCycleId: true, currentCycleId: true },
+    select: { id: true, teamId: true, parentCycleId: true, currentCycleId: true, createdById: true },
   });
   if (!task?.currentCycleId) throw missing();
   if (parentCycle) parentCycle = await client.taskCycle.findUnique({ where: { id: parentCycle.id } });
@@ -89,7 +89,7 @@ async function lockTerminal(client, taskId) {
 async function lockForCancellation(client, taskId) {
   const initial = await client.task.findFirst({
     where: { id: taskId, deletedAt: null },
-    select: { id: true, parentCycleId: true, currentCycleId: true },
+    select: { id: true, parentCycleId: true, currentCycleId: true, createdById: true },
   });
   if (!initial?.currentCycleId) throw missing();
   let task;
@@ -101,7 +101,7 @@ async function lockForCancellation(client, taskId) {
     await lockTaskAggregate(client, { rootTaskId: initial.id });
     task = await client.task.findFirst({
       where: { id: taskId, deletedAt: null },
-      select: { id: true, teamId: true, parentCycleId: true, currentCycleId: true },
+      select: { id: true, teamId: true, parentCycleId: true, currentCycleId: true, createdById: true },
     });
     if (!task?.currentCycleId) throw missing();
     rootTaskId = task.id;
@@ -207,7 +207,7 @@ export const createTaskService = ({ prisma, attachmentService }) => ({
 
   async detail(actor, id) {
     const assignmentInclude = { user: true, pauseIntervals: { orderBy: { startedAt: 'asc' } }, calendarVersion: { include: { calendar: true, schedules: true, exceptions: true } } };
-    const task = await prisma.task.findFirst({ where: { id, deletedAt: null, ...scopeWhere(actor) }, include: { team: true, currentCycle: { include: { assignments: { include: assignmentInclude, orderBy: { assignedAt: 'desc' } } } }, cycles: { include: { assignments: { include: assignmentInclude, orderBy: { assignedAt: 'asc' } }, requests: { include: { pauseIntervals: true }, orderBy: { createdAt: 'asc' } }, deadlineChanges: { orderBy: { createdAt: 'asc' } }, notes: { orderBy: { createdAt: 'asc' } } }, orderBy: { cycleNumber: 'asc' } } } });
+    const task = await prisma.task.findFirst({ where: { id, deletedAt: null, ...scopeWhere(actor) }, include: { team: true, createdBy: { select: { id: true, name: true } }, currentCycle: { include: { assignments: { include: assignmentInclude, orderBy: { assignedAt: 'desc' } } } }, cycles: { include: { assignments: { include: assignmentInclude, orderBy: { assignedAt: 'asc' } }, requests: { include: { pauseIntervals: true }, orderBy: { createdAt: 'asc' } }, deadlineChanges: { orderBy: { createdAt: 'asc' } }, notes: { orderBy: { createdAt: 'asc' } } }, orderBy: { cycleNumber: 'asc' } } } });
     if (!task) throw missing();
     const [parentCycle, subtasks, comments] = await Promise.all([
       task.parentCycleId
@@ -249,11 +249,19 @@ export const createTaskService = ({ prisma, attachmentService }) => ({
       const selfGlobal=responsible?.id===request.auth.userId&&['SECRETARY','ADMIN_MASTER'].includes(responsible?.role.code);
       if(!responsible||(!responsible.memberships.length&&!responsible.managedTeams.length&&!selfGlobal))throw new AppError(422,'ASSIGNEE_NOT_ELIGIBLE','Responsável não elegível para a equipe.');
       const taskId=randomUUID(), cycleId=randomUUID(), assignmentId=randomUUID(), now=new Date();
-      await tx.task.create({ data: { id: taskId, teamId: team.id, createdById: request.auth.userId } });
+      await tx.task.create({
+        data: {
+          id: taskId,
+          teamId: team.id,
+          createdById: request.auth.userId,
+          sigadocProcessNumber: input.sigadocProcessNumber ? input.sigadocProcessNumber.trim() : null,
+          sigadocProcessLink: input.sigadocProcessLink ? input.sigadocProcessLink.trim() : null,
+        },
+      });
       const cycle = await tx.taskCycle.create({ data: { id: cycleId, taskId, cycleNumber: 1, title: input.title, description: input.description, priority: input.priority, status:'AWAITING_ACCEPTANCE', deadlinePolicy:'RUNNING_CLOCK', acceptanceDurationMinutes:input.acceptanceDurationMinutes, executionDurationMinutes:input.executionDurationMinutes, acceptanceDeadlineAt, openedAt: now } });
       await tx.task.update({ where: { id: taskId }, data: { currentCycleId: cycleId } });
       await tx.taskAssignment.create({data:{id:assignmentId,cycleId,userId:responsible.id,assignedById:request.auth.userId,assignedAt:now,acceptanceDeadlineAt}});
-      await audit(tx, request, { entityType:'Task',entityId:taskId,action:'TASK_CREATED_AND_ASSIGNED',afterJson:{teamId:team.id,cycleId,assignmentId,userId:responsible.id,deadlinePolicy:'RUNNING_CLOCK',acceptanceDeadlineAt,acceptanceDurationMinutes:input.acceptanceDurationMinutes,executionDurationMinutes:input.executionDurationMinutes,adminTaskCreationException:request.auth.roleCode==='ADMIN_MASTER'},reason:input.reason });
+      await audit(tx, request, { entityType:'Task',entityId:taskId,action:'TASK_CREATED_AND_ASSIGNED',afterJson:{teamId:team.id,cycleId,assignmentId,userId:responsible.id,deadlinePolicy:'RUNNING_CLOCK',acceptanceDeadlineAt,acceptanceDurationMinutes:input.acceptanceDurationMinutes,executionDurationMinutes:input.executionDurationMinutes,adminTaskCreationException:request.auth.roleCode==='ADMIN_MASTER',sigadocProcessNumber: input.sigadocProcessNumber ? input.sigadocProcessNumber.trim() : null, sigadocProcessLink: input.sigadocProcessLink ? input.sigadocProcessLink.trim() : null},reason:input.reason });
       await outbox(tx, taskId, cycle, 'TASK_ASSIGNED',{userId:responsible.id,assignmentId});
       claims = await attachmentService.claimInitial(tx, request.auth.userId, cycleId, input.initialAttachmentIds);
       return presentTask(await tx.task.findUnique({ where:{id:taskId},include:includeCurrent }));
@@ -268,12 +276,34 @@ export const createTaskService = ({ prisma, attachmentService }) => ({
 
   async update(request, id, input) {
     return runCriticalTransaction(prisma, async (tx) => {
-      const { task, cycle } = await lockCurrent(tx, id); await requireManagement(tx, request, task.teamId, input.reason); requireExpectedVersion(cycle,input.expectedVersion);
-      const before={title:cycle.title,description:cycle.description,priority:cycle.priority,version:cycle.version};
+      const { task, cycle } = await lockCurrent(tx, id);
+      await requireManagement(tx, request, task.teamId, input.reason);
+      if (task.createdById !== request.auth.userId) {
+        throw new AppError(403, 'FORBIDDEN', 'Somente o criador original pode editar a tarefa.');
+      }
+      requireExpectedVersion(cycle, input.expectedVersion);
+      const beforeTask = await tx.task.findUnique({ where: { id: task.id }, select: { sigadocProcessNumber: true, sigadocProcessLink: true } });
+      const sigadocNumberUpdated = input.sigadocProcessNumber !== undefined;
+      const sigadocLinkUpdated = input.sigadocProcessLink !== undefined;
+      const sigadocUpdated = sigadocNumberUpdated || sigadocLinkUpdated;
+
+      if (sigadocUpdated) {
+        await tx.task.update({
+          where: { id: task.id },
+          data: {
+            ...(sigadocNumberUpdated ? { sigadocProcessNumber: input.sigadocProcessNumber ? input.sigadocProcessNumber.trim() : null } : {}),
+            ...(sigadocLinkUpdated ? { sigadocProcessLink: input.sigadocProcessLink ? input.sigadocProcessLink.trim() : null } : {}),
+          },
+        });
+      }
+
+      const before={title:cycle.title,description:cycle.description,priority:cycle.priority,version:cycle.version,sigadocProcessNumber:beforeTask?.sigadocProcessNumber??null,sigadocProcessLink:beforeTask?.sigadocProcessLink??null};
       const result=await tx.taskCycle.updateMany({where:{id:cycle.id,version:input.expectedVersion,closedAt:null},data:{...(input.title?{title:input.title}:{}),...(input.description?{description:input.description}:{}),...(input.priority?{priority:input.priority}:{}),version:{increment:1}}});
       if(result.count!==1)throw conflict('TASK_VERSION_CONFLICT','A tarefa foi alterada por outra pessoa.');
       const updated=await tx.taskCycle.findUnique({where:{id:cycle.id}});
-      await audit(tx,request,{entityType:'TaskCycle',entityId:cycle.id,action:'TASK_EDITED',beforeJson:before,afterJson:{title:updated.title,description:updated.description,priority:updated.priority,version:updated.version},reason:input.reason});
+      const newSigadocNumber = sigadocNumberUpdated ? (input.sigadocProcessNumber ? input.sigadocProcessNumber.trim() : null) : (beforeTask?.sigadocProcessNumber ?? null);
+      const newSigadocLink = sigadocLinkUpdated ? (input.sigadocProcessLink ? input.sigadocProcessLink.trim() : null) : (beforeTask?.sigadocProcessLink ?? null);
+      await audit(tx,request,{entityType:'TaskCycle',entityId:cycle.id,action:'TASK_EDITED',beforeJson:before,afterJson:{title:updated.title,description:updated.description,priority:updated.priority,version:updated.version,sigadocProcessNumber:newSigadocNumber,sigadocProcessLink:newSigadocLink},reason:input.reason});
       await outbox(tx, id, cycle, 'TASK_EDITED');
       return presentTask(await tx.task.findUnique({where:{id},include:includeCurrent}));
     });
@@ -343,7 +373,7 @@ export const createTaskService = ({ prisma, attachmentService }) => ({
 
   async complete(request,id,input,key){return executeIdempotent(prisma,{actorId:request.auth.userId,key,payload:{id,...input},operation:async(tx)=>{const{cycle,assignment}=await lockCurrent(tx,id);requireExpectedVersion(cycle,input.expectedVersion);transitionTo(cycle.status,'complete');if(!assignment||assignment.userId!==request.auth.userId)throw conflict('ASSIGNMENT_NOT_CURRENT','Somente o responsável atual pode concluir a tarefa.');if(cycle.requests.some((item)=>item.type==='RETURN'))throw conflict('PENDING_REQUEST_EXISTS','Há devolução pendente para esta atribuição.');const now=new Date();await closePendingRequests(tx,cycle.id,'CLOSED_BY_COMPLETION',request.auth.userId,now);await tx.taskAssignment.update({where:{id:assignment.id},data:{endedAt:now,endReason:'COMPLETED'}});await tx.taskCycle.update({where:{id:cycle.id},data:{status:'COMPLETED',completionText:input.completionText,closedAt:now,version:{increment:1}}});await audit(tx,request,{entityType:'TaskCycle',entityId:cycle.id,action:'TASK_COMPLETED',afterJson:{completionText:input.completionText,closedAt:now}});await outbox(tx,id,cycle,'TASK_COMPLETED',{userId:request.auth.userId});return presentTask(await tx.task.findUnique({where:{id},include:includeCurrent}));}})},
 
-  async cancel(request,id,input,key){return executeIdempotent(prisma,{actorId:request.auth.userId,key,payload:{id,...input},operation:async(tx)=>{const{root,children}=await lockForCancellation(tx,id);await requireManagement(tx,request,root.task.teamId,input.reason);requireExpectedVersion(root.cycle,input.expectedVersion);transitionTo(root.cycle.status,'cancel');const now=new Date();for(const child of children){await closePendingRequests(tx,child.currentCycle.id,'CLOSED_BY_CANCELLATION',request.auth.userId,now);await tx.taskAssignment.updateMany({where:{cycleId:child.currentCycle.id,endedAt:null},data:{endedAt:now,endReason:'CANCELLED'}});await tx.taskCycle.update({where:{id:child.currentCycle.id},data:{status:'CANCELLED',closedAt:now,version:{increment:1}}});await audit(tx,request,{entityType:'TaskCycle',entityId:child.currentCycle.id,action:'SUBTASK_CANCELLED_WITH_PARENT',reason:input.reason});await tx.outboxEvent.create({data:{id:randomUUID(),eventType:'SUBTASK_CANCELLED_WITH_PARENT',payloadJson:{taskId:child.id,cycleId:child.currentCycle.id,parentTaskId:id},dedupeKey:`task:${child.id}:SUBTASK_CANCELLED_WITH_PARENT:${child.currentCycle.version+1}`}});}await closePendingRequests(tx,root.cycle.id,'CLOSED_BY_CANCELLATION',request.auth.userId,now);if(root.assignment)await tx.taskAssignment.update({where:{id:root.assignment.id},data:{endedAt:now,endReason:'CANCELLED'}});await tx.taskCycle.update({where:{id:root.cycle.id},data:{status:'CANCELLED',closedAt:now,version:{increment:1}}});await audit(tx,request,{entityType:'TaskCycle',entityId:root.cycle.id,action:'TASK_CANCELLED',afterJson:{closedAt:now,cancelledSubtasks:children.length},reason:input.reason});await outbox(tx,id,root.cycle,'TASK_CANCELLED');return presentTask(await tx.task.findUnique({where:{id},include:includeCurrent}));}})},
+  async cancel(request,id,input,key){return executeIdempotent(prisma,{actorId:request.auth.userId,key,payload:{id,...input},operation:async(tx)=>{const{root,children}=await lockForCancellation(tx,id);await requireManagement(tx,request,root.task.teamId,input.reason);if (root.task.createdById !== request.auth.userId) { throw new AppError(403, 'FORBIDDEN', 'Somente o criador original pode cancelar a tarefa.'); }requireExpectedVersion(root.cycle,input.expectedVersion);transitionTo(root.cycle.status,'cancel');const now=new Date();for(const child of children){await closePendingRequests(tx,child.currentCycle.id,'CLOSED_BY_CANCELLATION',request.auth.userId,now);await tx.taskAssignment.updateMany({where:{cycleId:child.currentCycle.id,endedAt:null},data:{endedAt:now,endReason:'CANCELLED'}});await tx.taskCycle.update({where:{id:child.currentCycle.id},data:{status:'CANCELLED',closedAt:now,version:{increment:1}}});await audit(tx,request,{entityType:'TaskCycle',entityId:child.currentCycle.id,action:'SUBTASK_CANCELLED_WITH_PARENT',reason:input.reason});await tx.outboxEvent.create({data:{id:randomUUID(),eventType:'SUBTASK_CANCELLED_WITH_PARENT',payloadJson:{taskId:child.id,cycleId:child.currentCycle.id,parentTaskId:id},dedupeKey:`task:${child.id}:SUBTASK_CANCELLED_WITH_PARENT:${child.currentCycle.version+1}`}});}await closePendingRequests(tx,root.cycle.id,'CLOSED_BY_CANCELLATION',request.auth.userId,now);if(root.assignment)await tx.taskAssignment.update({where:{id:root.assignment.id},data:{endedAt:now,endReason:'CANCELLED'}});await tx.taskCycle.update({where:{id:root.cycle.id},data:{status:'CANCELLED',closedAt:now,version:{increment:1}}});await audit(tx,request,{entityType:'TaskCycle',entityId:root.cycle.id,action:'TASK_CANCELLED',afterJson:{closedAt:now,cancelledSubtasks:children.length},reason:input.reason});await outbox(tx,id,root.cycle,'TASK_CANCELLED');return presentTask(await tx.task.findUnique({where:{id},include:includeCurrent}));}})},
 
   async reopen(request,id,input,key){return restartCycle(prisma,request,id,input,key,'reopen')},
 
