@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createPreferenceService } from '../../src/modules/preferences/preference.service.js';
+import { updateKanbanColorSchema } from '../../src/modules/preferences/preference.schemas.js';
 
 describe('preferências individuais de cor de cartão (UserTaskPreference)', () => {
   const makeMockPrisma = () => {
@@ -85,6 +86,19 @@ describe('preferências individuais de cor de cartão (UserTaskPreference)', () 
     assert.deepEqual(result, { colors: { [taskId]: 'blue' } });
   });
 
+  it('salva e recupera cor personalizada no formato HEX (normalizada)', async () => {
+    const prisma = makeMockPrisma();
+    const service = createPreferenceService({ prisma });
+    const actor = { userId: 'manager-alpha', roleCode: 'MANAGER' };
+    const taskId = '11111111-1111-4111-8111-111111111111';
+
+    const saved = await service.updateKanbanColor(actor, taskId, '#3B82F6');
+    assert.deepEqual(saved, { taskId, color: '#3b82f6' });
+
+    const result = await service.listKanbanColors(actor, { taskIds: taskId });
+    assert.deepEqual(result, { colors: { [taskId]: '#3b82f6' } });
+  });
+
   it('garante isolamento estrito entre usuários para a mesma tarefa', async () => {
     const prisma = makeMockPrisma();
     const service = createPreferenceService({ prisma });
@@ -162,5 +176,20 @@ describe('preferências individuais de cor de cartão (UserTaskPreference)', () 
       async () => service.updateKanbanColor(admin, deletedTaskId, 'orange'),
       (err) => err.status === 404 && err.code === 'TASK_NOT_FOUND',
     );
+  });
+
+  it('valida schema para cores predefinidas, HEX válido e rejeita formatos inválidos', () => {
+    // Válidos
+    assert.equal(updateKanbanColorSchema.safeParse({ params: { taskId: 'task-1' }, query: {}, body: { color: 'blue' } }).success, true);
+    assert.equal(updateKanbanColorSchema.safeParse({ params: { taskId: 'task-1' }, query: {}, body: { color: '#3b82f6' } }).success, true);
+    assert.equal(updateKanbanColorSchema.safeParse({ params: { taskId: 'task-1' }, query: {}, body: { color: '#FFF' } }).success, true);
+    assert.equal(updateKanbanColorSchema.safeParse({ params: { taskId: 'task-1' }, query: {}, body: { color: 'default' } }).success, true);
+    assert.equal(updateKanbanColorSchema.safeParse({ params: { taskId: 'task-1' }, query: {}, body: { color: null } }).success, true);
+
+    // Inválidos
+    assert.equal(updateKanbanColorSchema.safeParse({ params: { taskId: 'task-1' }, query: {}, body: { color: 'red' } }).success, false);
+    assert.equal(updateKanbanColorSchema.safeParse({ params: { taskId: 'task-1' }, query: {}, body: { color: '3b82f6' } }).success, false);
+    assert.equal(updateKanbanColorSchema.safeParse({ params: { taskId: 'task-1' }, query: {}, body: { color: '#12345' } }).success, false);
+    assert.equal(updateKanbanColorSchema.safeParse({ params: { taskId: 'task-1' }, query: {}, body: { color: '#gggggg' } }).success, false);
   });
 });

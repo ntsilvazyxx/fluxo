@@ -205,6 +205,81 @@ export const createTaskService = ({ prisma, attachmentService }) => ({
     return { tasks: tasks.map(presentTask), meta: { page: filters.page, pageSize: filters.pageSize, total, totalPages: Math.ceil(total / filters.pageSize) } };
   },
 
+  async calendar(actor, filters) {
+    const now = new Date();
+    let startDate;
+    let endDate;
+    if (filters.month) {
+      const [year, month] = filters.month.split('-').map(Number);
+      startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0));
+      endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+    } else {
+      startDate = filters.start ?? new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1, 0, 0, 0));
+      endDate = filters.end ?? new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999));
+    }
+
+    const where = {
+      deletedAt: null,
+      currentCycleId: { not: null },
+      AND: [scopeWhere(actor)],
+    };
+
+    if (filters.teamId) where.teamId = filters.teamId;
+
+    const responsibility = (userId) => ({
+      assignments: { some: { userId, OR: [{ endedAt: null }, { endReason: 'COMPLETED' }] } },
+    });
+
+    if (filters.responsibleId) {
+      if (actor.roleCode === 'TECHNICIAN' && filters.responsibleId !== actor.userId) {
+        where.id = '__outside_scope__';
+      } else {
+        where.AND.push({ currentCycle: responsibility(filters.responsibleId) });
+      }
+    }
+
+    where.currentCycle = {
+      ...(where.currentCycle ?? {}),
+      OR: [
+        { deadlineAt: { gte: startDate, lte: endDate } },
+        { openedAt: { gte: startDate, lte: endDate } },
+        { status: { in: ACTIVE_STATUSES } },
+      ],
+    };
+
+    const [tasks, exceptions] = await Promise.all([
+      prisma.task.findMany({
+        where,
+        include: includeCurrent,
+        orderBy: { currentCycle: { deadlineAt: 'asc' } },
+        take: 300,
+      }),
+      prisma.calendarException.findMany({
+        where: {
+          localDate: { gte: startDate, lte: endDate },
+        },
+        select: {
+          id: true,
+          localDate: true,
+          type: true,
+          description: true,
+        },
+        orderBy: { localDate: 'asc' },
+      }),
+    ]);
+
+    return {
+      period: { start: startDate, end: endDate },
+      tasks: tasks.map(presentTask),
+      exceptions: exceptions.map((e) => ({
+        id: e.id,
+        date: e.localDate.toISOString().slice(0, 10),
+        type: e.type,
+        description: e.description,
+      })),
+    };
+  },
+
   async detail(actor, id) {
     const assignmentInclude = { user: true, pauseIntervals: { orderBy: { startedAt: 'asc' } }, calendarVersion: { include: { calendar: true, schedules: true, exceptions: true } } };
     const task = await prisma.task.findFirst({ where: { id, deletedAt: null, ...scopeWhere(actor) }, include: { team: true, createdBy: { select: { id: true, name: true } }, currentCycle: { include: { assignments: { include: assignmentInclude, orderBy: { assignedAt: 'desc' } } } }, cycles: { include: { assignments: { include: assignmentInclude, orderBy: { assignedAt: 'asc' } }, requests: { include: { pauseIntervals: true }, orderBy: { createdAt: 'asc' } }, deadlineChanges: { orderBy: { createdAt: 'asc' } }, notes: { orderBy: { createdAt: 'asc' } } }, orderBy: { cycleNumber: 'asc' } } } });

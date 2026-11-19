@@ -13,7 +13,14 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CARD_COLORS, CardColorKey, COLOR_OPTIONS } from './task-colors.ts';
+import { AdvancedColorPicker } from './AdvancedColorPicker.tsx';
+import {
+  CARD_COLORS,
+  CardColorKey,
+  COLOR_OPTIONS,
+  getCardColorConfig,
+  isValidHex,
+} from './task-colors.ts';
 
 const statusLabels = {
   PENDING: 'Pendente',
@@ -74,13 +81,16 @@ export function TaskCard({
   const navigate = useNavigate();
   const menu = useRef<HTMLDetailsElement | null>(null);
   const paletteRef = useRef<HTMLDivElement | null>(null);
+  const paletteBtnRef = useRef<HTMLButtonElement | null>(null);
   const summaryRef = useRef<HTMLDivElement | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+  const [popoverPlacement, setPopoverPlacement] = useState<'bottom' | 'top'>('bottom');
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [positionStyle, setPositionStyle] = useState<React.CSSProperties>({});
   const target = `/kanban/tarefas/${task.id}${search}`;
-  const colorConfig = CARD_COLORS[(color as CardColorKey) || 'default'] || CARD_COLORS.default;
-  const isCustomColor = Boolean(color && color !== 'default' && CARD_COLORS[color as CardColorKey]);
+  const colorConfig = getCardColorConfig(color);
+  const isCustomColor = Boolean(color && color !== 'default');
 
   // Garante que apenas um pop-up permaneça aberto simultaneamente
   useEffect(() => {
@@ -89,6 +99,7 @@ export function TaskCard({
       if (custom.detail?.id !== task.id) {
         setSummaryOpen(false);
         setPaletteOpen(false);
+        setIsAdvancedOpen(false);
       }
     };
     window.addEventListener('seaf:close-task-popups', handleCloseOthers);
@@ -100,6 +111,7 @@ export function TaskCard({
       menu.current.open = false;
     }
     setPaletteOpen(false);
+    setIsAdvancedOpen(false);
     setSummaryOpen(true);
     window.dispatchEvent(
       new CustomEvent('seaf:close-task-popups', {
@@ -114,7 +126,9 @@ export function TaskCard({
     setSummaryOpen(false);
     setPaletteOpen((prev) => {
       const next = !prev;
-      if (next) {
+      if (!next) {
+        setIsAdvancedOpen(false);
+      } else {
         window.dispatchEvent(
           new CustomEvent('seaf:close-task-popups', {
             detail: { id: task.id, type: 'palette' },
@@ -125,17 +139,35 @@ export function TaskCard({
     });
   };
 
+  // Posicionamento inteligente da paleta (abre para cima se o espaço inferior for insuficiente)
+  useEffect(() => {
+    if (!paletteOpen || !paletteBtnRef.current) return;
+    const rect = paletteBtnRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    if (spaceBelow < 310) {
+      setPopoverPlacement('top');
+    } else {
+      setPopoverPlacement('bottom');
+    }
+  }, [paletteOpen, isAdvancedOpen]);
+
   // Teclado e clique fora para a paleta
   useEffect(() => {
     if (!paletteOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setPaletteOpen(false);
+        if (isAdvancedOpen) {
+          setIsAdvancedOpen(false);
+        } else {
+          setPaletteOpen(false);
+          paletteBtnRef.current?.focus();
+        }
       }
     };
     const onMouseDown = (e: MouseEvent) => {
       if (paletteRef.current && !paletteRef.current.contains(e.target as Node)) {
         setPaletteOpen(false);
+        setIsAdvancedOpen(false);
       }
     };
     document.addEventListener('keydown', onKeyDown);
@@ -144,7 +176,7 @@ export function TaskCard({
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('mousedown', onMouseDown);
     };
-  }, [paletteOpen]);
+  }, [paletteOpen, isAdvancedOpen]);
 
   // Teclado, foco e clique fora para o pop-up compacto de resumo
   useEffect(() => {
@@ -213,11 +245,7 @@ export function TaskCard({
     <article
       data-task-id={task.id}
       className={`relative min-w-0 rounded-xl border shadow-sm transition ${colorConfig.bgClass} ${colorConfig.borderClass} ${colorConfig.hoverBorderClass}`}
-      style={
-        isCustomColor
-            ? { backgroundColor: colorConfig.bgColor, borderColor: colorConfig.borderColor }
-            : undefined
-      }
+      style={colorConfig.style}
     >
       <Link
         to={target}
@@ -236,7 +264,11 @@ export function TaskCard({
               type="button"
               {...dragHandleProps}
               aria-label={`Arrastar tarefa #${task.publicNumber}`}
-              className="touch-none cursor-grab active:cursor-grabbing text-muted/70 hover:text-brand-700 p-0.5 -ml-1 rounded hover:bg-black/5 transition-colors focus-visible:outline-2 focus-visible:outline-brand-700"
+              className={`touch-none cursor-grab active:cursor-grabbing p-0.5 -ml-1 rounded transition-colors focus-visible:outline-2 focus-visible:outline-brand-700 ${
+                colorConfig.isDark
+                  ? 'text-white/70 hover:text-white hover:bg-white/10'
+                  : 'text-muted/70 hover:text-brand-700 hover:bg-black/5'
+              }`}
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -245,23 +277,23 @@ export function TaskCard({
               <GripVertical size={14} />
             </button>
           )}
-          <span className="text-xs font-bold text-brand-700">#{task.publicNumber}</span>
+          <span className={`text-xs font-bold ${colorConfig.numberClass}`}>#{task.publicNumber}</span>
           <PriorityBadge priority={c.priority} />
         </div>
-        <h3 className="mt-2 line-clamp-2 text-sm font-bold leading-5 text-text" title={c.title}>
+        <h3 className={`mt-2 line-clamp-2 text-sm font-bold leading-5 ${colorConfig.textClass}`} title={c.title}>
           {c.title}
         </h3>
-        <p className="mt-1 truncate text-xs text-muted" title={task.team.name}>
+        <p className={`mt-1 truncate text-xs ${colorConfig.mutedClass}`} title={task.team.name}>
           {task.team.name}
         </p>
-        <div className="mt-3 space-y-1.5 text-xs text-muted">
+        <div className={`mt-3 space-y-1.5 text-xs ${colorConfig.mutedClass}`}>
           <p className="flex min-w-0 items-center gap-1.5">
             <UserRound size={13} className="shrink-0" />
             <span className="truncate">
               {c.assignment?.user?.name ?? (personal && c.status === 'COMPLETED' ? 'Concluída por você' : 'Sem responsável atual')}
             </span>
           </p>
-          <p className={`flex items-start gap-1.5 ${c.overdue ? 'font-bold text-danger' : ''}`}>
+          <p className={`flex items-start gap-1.5 ${c.overdue ? (colorConfig.isDark ? 'font-bold text-red-300' : 'font-bold text-danger') : ''}`}>
             {c.overdue ? <AlertTriangle size={13} className="mt-0.5 shrink-0" /> : <CalendarClock size={13} className="mt-0.5 shrink-0" />}
             <span>
               {c.deadlineAt ? new Date(c.deadlineAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'Sem prazo'}
@@ -276,63 +308,108 @@ export function TaskCard({
         )}
       </Link>
 
-      <div className="absolute right-1 top-1 z-10 flex items-center gap-0.5">
+      <div
+        className="absolute right-1 top-1 z-10 flex items-center gap-0.5"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
         {onColorChange && (
           <div ref={paletteRef} className="relative">
             <button
+              ref={paletteBtnRef}
               type="button"
               aria-label={`Personalizar cor da tarefa #${task.publicNumber}`}
               aria-expanded={paletteOpen}
-              className="grid size-9 cursor-pointer place-items-center rounded-lg text-muted hover:bg-black/5 hover:text-text transition-colors focus-visible:outline-2 focus-visible:outline-brand-700"
+              className={`grid size-9 cursor-pointer place-items-center rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-brand-700 ${colorConfig.actionIconClass}`}
               onClick={togglePalette}
             >
               <Palette size={16} />
             </button>
             {paletteOpen && (
               <div
-                role="dialog"
-                aria-label="Paleta de cores do cartão"
-                className="absolute right-0 top-10 z-30 w-44 rounded-xl border border-border bg-white p-2.5 shadow-card"
+                className={`absolute right-0 z-30 ${popoverPlacement === 'top' ? 'bottom-full mb-1.5' : 'top-10'}`}
                 onClick={(e) => e.stopPropagation()}
               >
-                <p className="text-[11px] font-bold text-muted mb-2">Cor do cartão</p>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {COLOR_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      aria-label={`Selecionar cor ${opt.label}`}
-                      title={opt.label}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onColorChange(opt.id === 'default' ? null : opt.id);
-                        setPaletteOpen(false);
-                      }}
-                      className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-brand-700 ${(color || 'default') === opt.id
-                          ? 'ring-2 ring-brand-700 ring-offset-1 border-brand-700'
-                          : 'border-slate-300 hover:border-slate-400'
-                        }`}
-                      style={{ backgroundColor: opt.swatchBg }}
-                    >
-                      {opt.id === 'default' && <RotateCcw size={12} className="text-slate-500" />}
-                    </button>
-                  ))}
-                </div>
-                {isCustomColor && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onColorChange(null);
+                {isAdvancedOpen ? (
+                  <AdvancedColorPicker
+                    initialColor={color}
+                    onApply={(newHex) => {
+                      onColorChange(newHex);
                       setPaletteOpen(false);
+                      setIsAdvancedOpen(false);
+                      paletteBtnRef.current?.focus();
                     }}
-                    className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-slate-50 py-1.5 text-[11px] font-semibold text-muted hover:bg-slate-100 hover:text-text transition-colors"
+                    onCancel={() => {
+                      setPaletteOpen(false);
+                      setIsAdvancedOpen(false);
+                      paletteBtnRef.current?.focus();
+                    }}
+                  />
+                ) : (
+                  <div
+                    role="dialog"
+                    aria-label="Paleta de cores do cartão"
+                    className="w-48 rounded-xl border border-border bg-white p-2.5 shadow-card"
                   >
-                    <RotateCcw size={12} />
-                    Restaurar cor padrão
-                  </button>
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-[11px] font-bold text-muted">Cor do cartão</p>
+                      <button
+                        type="button"
+                        aria-label="Abrir paleta avançada"
+                        title="Paleta avançada de cores"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setIsAdvancedOpen(true);
+                        }}
+                        className="flex items-center gap-1 rounded p-1 text-[11px] font-semibold text-brand-700 hover:bg-brand-50 hover:text-brand-900 transition-colors"
+                      >
+                        <Palette size={13} />
+                        <span>Mais cores</span>
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {COLOR_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          aria-label={`Selecionar cor ${opt.label}`}
+                          title={opt.label}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onColorChange(opt.id === 'default' ? null : opt.id);
+                            setPaletteOpen(false);
+                            paletteBtnRef.current?.focus();
+                          }}
+                          className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-brand-700 ${
+                            (color || 'default') === opt.id
+                              ? 'ring-2 ring-brand-700 ring-offset-1 border-brand-700'
+                              : 'border-slate-300 hover:border-slate-400'
+                          }`}
+                          style={{ backgroundColor: opt.swatchBg }}
+                        >
+                          {opt.id === 'default' && <RotateCcw size={12} className="text-slate-500" />}
+                        </button>
+                      ))}
+                    </div>
+                    {isCustomColor && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onColorChange(null);
+                          setPaletteOpen(false);
+                          paletteBtnRef.current?.focus();
+                        }}
+                        className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-slate-50 py-1.5 text-[11px] font-semibold text-muted hover:bg-slate-100 hover:text-text transition-colors"
+                      >
+                        <RotateCcw size={12} />
+                        Restaurar cor padrão
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -359,11 +436,12 @@ export function TaskCard({
           >
             <summary
               aria-label={`Ações da tarefa #${task.publicNumber}`}
-              className="grid size-9 cursor-pointer list-none place-items-center rounded-lg text-muted hover:bg-black/5 hover:text-text transition-colors"
+              className={`grid size-9 cursor-pointer list-none place-items-center rounded-lg transition-colors ${colorConfig.actionIconClass}`}
               onClick={(e) => {
                 e.stopPropagation();
                 setSummaryOpen(false);
                 setPaletteOpen(false);
+                setIsAdvancedOpen(false);
               }}
             >
               <MoreHorizontal size={18} />

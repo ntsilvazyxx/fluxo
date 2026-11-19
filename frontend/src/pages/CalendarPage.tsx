@@ -1,141 +1,496 @@
-/* eslint-disable react-hooks/set-state-in-effect */
-import { CalendarDays, Check, Plus, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  AlertTriangle,
+  Clock3,
+  CheckCircle2,
+  ListTodo,
+} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthContext.tsx';
+import { TaskDetailModal } from '../tasks/TaskDetailModal.tsx';
 
-const weekdays = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
-const idempotencyKey = () => crypto.randomUUID();
-const minutes = (time) => { const [hours, mins] = time.split(':').map(Number); return hours * 60 + mins; };
-const clock = (value) => `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
-const localInput = (value) => value ? new Date(value).toISOString().slice(0, 16) : '';
-const initialSchedules = () => [1, 2, 3, 4, 5].flatMap((weekday) => [
-  { weekday, start: '08:00', end: '12:00' },
-  { weekday, start: '13:00', end: '17:00' },
-]);
+type TaskItem = {
+  id: string;
+  publicNumber: string;
+  team: { id: string; name: string };
+  cycle: {
+    id: string;
+    title: string;
+    status: string;
+    priority: string;
+    deadlineAt: string | null;
+    openedAt: string;
+    closedAt?: string | null;
+    overdue?: boolean;
+    assignment?: {
+      user?: { id: string; name: string };
+    } | null;
+  } | null;
+};
+
+type CalendarException = {
+  id: string;
+  date: string;
+  type: string;
+  description: string;
+};
+
+const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const MONTH_NAMES = [
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+];
+
+const priorityBadges: Record<string, string> = {
+  URGENT: 'bg-danger text-white',
+  HIGH: 'bg-warning text-text font-bold',
+  NORMAL: 'bg-brand-100 text-brand-900',
+  LOW: 'bg-slate-100 text-slate-700',
+};
+
+const statusClasses: Record<string, string> = {
+  PENDING: 'border-l-4 border-amber-500 bg-amber-50/70',
+  AWAITING_ACCEPTANCE: 'border-l-4 border-indigo-500 bg-indigo-50/70',
+  IN_PROGRESS: 'border-l-4 border-brand-600 bg-blue-50/70',
+  COMPLETED: 'border-l-4 border-success bg-emerald-50/70',
+  CANCELLED: 'border-l-4 border-slate-400 bg-slate-100/70 text-slate-500',
+};
 
 export function CalendarPage() {
-  const { request, user } = useAuth();
-  const canEdit = ['ADMIN_MASTER', 'SECRETARY', 'MANAGER'].includes(user.role.code);
-  const [calendars, setCalendars] = useState([]);
-  const [teams, setTeams] = useState([]);
-  const [selectedId, setSelectedId] = useState('');
-  const [calendar, setCalendar] = useState(null);
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+  const { request } = useAuth();
+  const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [view, setView] = useState<'month' | 'week'>('month');
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [exceptions, setExceptions] = useState<CalendarException[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState('');
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
-  const loadList = useCallback(async () => {
-    const response = await request('/calendars');
-    const json = await response.json();
-    if (!response.ok) throw new Error(json.error?.message);
-    setCalendars(json.data.calendars);
-    setSelectedId((current) => current || json.data.calendars[0]?.id || '');
-  }, [request]);
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth();
 
-  const loadDetail = useCallback(async (id) => {
-    if (!id) return setCalendar(null);
-    const response = await request(`/calendars/${id}`);
-    const json = await response.json();
-    if (!response.ok) throw new Error(json.error?.message);
-    setCalendar(json.data.calendar);
-  }, [request]);
+  const formattedMonth = useMemo(() => {
+    const m = String(currentMonth + 1).padStart(2, '0');
+    return `${currentYear}-${m}`;
+  }, [currentYear, currentMonth]);
+
+  const loadCalendar = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await request(`/tasks/calendar?month=${formattedMonth}`);
+      if (!response.ok) return;
+      const json = await response.json();
+      setTasks(json.data?.tasks ?? []);
+      setExceptions(json.data?.exceptions ?? []);
+    } catch {
+      // Ignora erro transitório
+    } finally {
+      setLoading(false);
+    }
+  }, [formattedMonth, request]);
 
   useEffect(() => {
-    loadList().catch((cause) => setError(cause.message));
-    if (canEdit) request('/teams').then((response) => response.json()).then((json) => setTeams(json.data?.teams ?? []));
-  }, [loadList, request, canEdit]);
-  useEffect(() => { loadDetail(selectedId).catch((cause) => setError(cause.message)); }, [selectedId, loadDetail]);
+    void loadCalendar();
+  }, [loadCalendar]);
 
-  const mutate = async (path, body, method = 'POST') => {
-    setBusy(true);
-    setError('');
-    try {
-      const response = await request(path, { method, headers: { 'idempotency-key': idempotencyKey() }, body: JSON.stringify(body) });
-      const json = await response.json();
-      if (!response.ok) throw new Error(json.error?.message ?? 'Não foi possível salvar o calendário.');
-      await loadList();
-      setSelectedId(json.data.calendar.id);
-      setCalendar(json.data.calendar);
-      return true;
-    } catch (cause) {
-      setError(cause.message);
-      return false;
-    } finally {
-      setBusy(false);
-    }
+  const prevMonth = () => {
+    setCurrentDate(new Date(currentYear, currentMonth - 1, 1));
   };
 
-  const availableTeams = teams.filter((team) => !calendars.some((item) => item.team.id === team.id));
-  return <div className="max-w-6xl">
-    <div className="flex flex-wrap items-end justify-between gap-3">
-      <div><p className="text-sm font-bold text-brand-700">Configuração por equipe</p><h1 className="mt-1 text-3xl font-extrabold">Calendários de trabalho</h1><p className="mt-2 text-muted">Expedientes, intervalos, feriados e vigências históricas.</p></div>
-      <CalendarDays className="text-brand-700" size={38} />
+  const nextMonth = () => {
+    setCurrentDate(new Date(currentYear, currentMonth + 1, 1));
+  };
+
+  const goToToday = () => {
+    setCurrentDate(new Date());
+  };
+
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((t) => {
+      const cycle = t.cycle;
+      if (!cycle) return false;
+      if (statusFilter && cycle.status !== statusFilter) return false;
+      if (priorityFilter && cycle.priority !== priorityFilter) return false;
+      return true;
+    });
+  }, [tasks, statusFilter, priorityFilter]);
+
+  // Dias do mês em grade (visão mensal)
+  const monthDays = useMemo(() => {
+    const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay();
+    const lastDayDate = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const prevMonthLastDate = new Date(currentYear, currentMonth, 0).getDate();
+
+    const days = [];
+
+    // Dias do mês anterior para completar primeira semana
+    for (let i = firstDayIndex - 1; i >= 0; i--) {
+      days.push({
+        dayNumber: prevMonthLastDate - i,
+        isCurrentMonth: false,
+        dateString: `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(prevMonthLastDate - i).padStart(2, '0')}`,
+      });
+    }
+
+    // Dias do mês corrente
+    for (let i = 1; i <= lastDayDate; i++) {
+      days.push({
+        dayNumber: i,
+        isCurrentMonth: true,
+        dateString: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`,
+      });
+    }
+
+    // Dias do próximo mês para completar grade de 35 ou 42
+    const totalSlots = days.length > 35 ? 42 : 35;
+    const remaining = totalSlots - days.length;
+    for (let i = 1; i <= remaining; i++) {
+      days.push({
+        dayNumber: i,
+        isCurrentMonth: false,
+        dateString: `${currentYear}-${String(currentMonth + 2).padStart(2, '0')}-${String(i).padStart(2, '0')}`,
+      });
+    }
+
+    return days;
+  }, [currentYear, currentMonth]);
+
+  // Dias da semana corrente (visão semanal)
+  const weekDays = useMemo(() => {
+    const today = new Date(currentDate);
+    const dayOfWeek = today.getDay();
+    const sunday = new Date(today.setDate(today.getDate() - dayOfWeek));
+
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(sunday);
+      d.setDate(sunday.getDate() + i);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      days.push({
+        dayName: WEEKDAYS[i],
+        dayNumber: d.getDate(),
+        dateString: `${y}-${m}-${day}`,
+        isToday: new Date().toDateString() === d.toDateString(),
+      });
+    }
+    return days;
+  }, [currentDate]);
+
+  // Agrupamento de tarefas por data ISO YYYY-MM-DD
+  const tasksByDate = useMemo(() => {
+    const map = new Map<string, TaskItem[]>();
+    for (const t of filteredTasks) {
+      if (!t.cycle?.deadlineAt) continue;
+      const dateKey = t.cycle.deadlineAt.slice(0, 10);
+      const list = map.get(dateKey) ?? [];
+      list.push(t);
+      map.set(dateKey, list);
+    }
+    return map;
+  }, [filteredTasks]);
+
+  // Feriados e pontos facultativos por data
+  const exceptionsByDate = useMemo(() => {
+    const map = new Map<string, CalendarException>();
+    for (const ex of exceptions) {
+      map.set(ex.date, ex);
+    }
+    return map;
+  }, [exceptions]);
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  return (
+    <div className="space-y-6">
+      {/* 1. Cabeçalho da página */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-brand-700">
+            <CalendarDays size={20} />
+            <span className="text-sm font-bold tracking-wide uppercase">Operacional</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-text mt-0.5">
+            Calendário de Tarefas
+          </h1>
+          <p className="text-sm text-muted">
+            Acompanhamento visual de prazos de entrega e feriados institucionais.
+          </p>
+        </div>
+
+        {/* Alternância de visão e filtros */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex rounded-xl bg-slate-100 p-1 border border-border">
+            <button
+              type="button"
+              onClick={() => setView('month')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${
+                view === 'month' ? 'bg-white text-brand-900 shadow-xs' : 'text-muted hover:text-text'
+              }`}
+            >
+              Mês
+            </button>
+            <button
+              type="button"
+              onClick={() => setView('week')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${
+                view === 'week' ? 'bg-white text-brand-900 shadow-xs' : 'text-muted hover:text-text'
+              }`}
+            >
+              Semana
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <select
+              aria-label="Filtrar por status"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="field text-xs py-1.5 min-w-[130px]"
+            >
+              <option value="">Todos os status</option>
+              <option value="PENDING">Pendente</option>
+              <option value="AWAITING_ACCEPTANCE">Aguardando aceite</option>
+              <option value="IN_PROGRESS">Em andamento</option>
+              <option value="COMPLETED">Concluída</option>
+            </select>
+
+            <select
+              aria-label="Filtrar por prioridade"
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+              className="field text-xs py-1.5 min-w-[130px]"
+            >
+              <option value="">Todas prioridades</option>
+              <option value="URGENT">Urgente</option>
+              <option value="HIGH">Alta</option>
+              <option value="NORMAL">Normal</option>
+              <option value="LOW">Baixa</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Barra de navegação do período */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-border shadow-xs">
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg sm:text-xl font-extrabold text-brand-900 min-w-[180px]">
+            {MONTH_NAMES[currentMonth]} {currentYear}
+          </h2>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={prevMonth}
+              aria-label="Mês anterior"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-border text-slate-600 hover:bg-slate-100 transition-colors"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={goToToday}
+              className="px-2.5 py-1 text-xs font-bold rounded-lg border border-border text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              Hoje
+            </button>
+            <button
+              type="button"
+              onClick={nextMonth}
+              aria-label="Próximo mês"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-border text-slate-600 hover:bg-slate-100 transition-colors"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* Legenda de situação */}
+        <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Concluída
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-brand-600" /> Em andamento
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> Aguardando / Pendente
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-danger" /> Atrasada
+          </span>
+        </div>
+      </div>
+
+      {/* 3. Grade do Calendário */}
+      {view === 'month' ? (
+        <div className="rounded-2xl border border-border bg-white shadow-panel overflow-hidden">
+          {/* Cabeçalho dos dias da semana */}
+          <div className="grid grid-cols-7 border-b border-border bg-slate-50/80 text-center text-xs font-bold text-slate-600">
+            {WEEKDAYS.map((day) => (
+              <div key={day} className="py-2.5">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          {/* Células dos dias do mês */}
+          <div className="grid grid-cols-7 auto-rows-[minmax(110px,1fr)] divide-x divide-y divide-border">
+            {monthDays.map((item, idx) => {
+              const dayTasks = tasksByDate.get(item.dateString) ?? [];
+              const exception = exceptionsByDate.get(item.dateString);
+              const isToday = item.dateString === todayIso;
+
+              return (
+                <div
+                  key={`${item.dateString}-${idx}`}
+                  className={`relative p-2 transition-colors flex flex-col justify-between ${
+                    item.isCurrentMonth ? 'bg-white' : 'bg-slate-50/50 text-slate-400'
+                  } ${isToday ? 'ring-2 ring-inset ring-brand-500/70 bg-brand-50/20' : ''}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span
+                      className={`text-xs font-extrabold rounded-md px-1.5 py-0.5 ${
+                        isToday
+                          ? 'bg-brand-700 text-white shadow-xs'
+                          : item.isCurrentMonth
+                            ? 'text-text'
+                            : 'text-slate-400'
+                      }`}
+                    >
+                      {item.dayNumber}
+                    </span>
+
+                    {exception && (
+                      <span
+                        title={exception.description}
+                        className="truncate text-[10px] font-bold text-amber-700 bg-amber-100 px-1 py-0.5 rounded"
+                      >
+                        {exception.description || 'Feriado'}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Lista de tarefas do dia */}
+                  <div className="mt-1.5 space-y-1 flex-1 overflow-y-auto max-h-[85px] no-scrollbar">
+                    {dayTasks.map((t) => {
+                      const isOverdue = t.cycle?.overdue;
+                      const isCompleted = t.cycle?.status === 'COMPLETED';
+
+                      let badgeClass = 'bg-brand-50 text-brand-900 border border-brand-200';
+                      if (isCompleted) {
+                        badgeClass = 'bg-emerald-50 text-emerald-800 border border-emerald-200';
+                      } else if (isOverdue) {
+                        badgeClass = 'bg-rose-50 text-rose-800 border border-rose-300 font-bold';
+                      }
+
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => setSelectedTaskId(t.id)}
+                          className={`w-full text-left rounded-lg p-1 text-[11px] leading-tight transition-all hover:scale-[1.02] shadow-xs truncate block ${badgeClass}`}
+                          title={`#${t.publicNumber} - ${t.cycle?.title}`}
+                        >
+                          <span className="font-bold">#{t.publicNumber}</span> {t.cycle?.title}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        /* Visão Semanal Detalhada */
+        <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
+          {weekDays.map((day) => {
+            const dayTasks = tasksByDate.get(day.dateString) ?? [];
+            const exception = exceptionsByDate.get(day.dateString);
+
+            return (
+              <div
+                key={day.dateString}
+                className={`flex flex-col rounded-2xl border p-3.5 bg-white shadow-xs ${
+                  day.isToday ? 'border-brand-500 ring-2 ring-brand-500/20' : 'border-border'
+                }`}
+              >
+                <div className="flex items-center justify-between pb-2 border-b border-border">
+                  <div>
+                    <span className="text-xs font-bold text-muted uppercase">{day.dayName}</span>
+                    <p className={`text-base font-extrabold ${day.isToday ? 'text-brand-700' : 'text-text'}`}>
+                      {day.dayNumber}
+                    </p>
+                  </div>
+                  {exception && (
+                    <span
+                      title={exception.description}
+                      className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded max-w-[80px] truncate"
+                    >
+                      {exception.description || 'Feriado'}
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-3 space-y-2 flex-1">
+                  {dayTasks.length ? (
+                    dayTasks.map((t) => (
+                      <article
+                        key={t.id}
+                        onClick={() => setSelectedTaskId(t.id)}
+                        className={`cursor-pointer rounded-xl p-2.5 text-xs shadow-xs transition-all hover:shadow-md ${
+                          statusClasses[t.cycle?.status || 'PENDING']
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <span className="font-extrabold text-brand-800">#{t.publicNumber}</span>
+                          <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                              priorityBadges[t.cycle?.priority || 'NORMAL']
+                            }`}
+                          >
+                            {t.cycle?.priority}
+                          </span>
+                        </div>
+                        <p className="font-semibold line-clamp-2 text-text">{t.cycle?.title}</p>
+                        <p className="mt-1.5 text-[11px] text-muted truncate">
+                          {t.cycle?.assignment?.user?.name || 'Sem responsável'}
+                        </p>
+                      </article>
+                    ))
+                  ) : (
+                    <p className="text-[11px] text-muted/60 text-center py-6">Sem prazos</p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Modal de Detalhes da Tarefa Integrado */}
+      {selectedTaskId && (
+        <TaskDetailModal
+          taskId={selectedTaskId}
+          onClose={() => setSelectedTaskId(null)}
+          onTaskUpdated={() => void loadCalendar()}
+        />
+      )}
     </div>
-    {error && <p role="alert" className="mt-5 rounded-xl bg-red-50 p-3 text-danger">{error}</p>}
-    <div className="mt-6 grid gap-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
-      <aside className="space-y-4">
-        {canEdit && availableTeams.length > 0 && <CreateCalendar teams={availableTeams} busy={busy} onSubmit={(body) => mutate('/calendars', body)} />}
-        <section className="rounded-2xl border border-border bg-white p-4 shadow-card">
-          <h2 className="font-extrabold">Equipes configuradas</h2>
-          <div className="mt-3 space-y-2">{calendars.map((item) => <button key={item.id} onClick={() => setSelectedId(item.id)} className={`min-h-11 w-full rounded-xl px-3 text-left text-sm font-bold ${selectedId === item.id ? 'bg-brand-900 text-white' : 'bg-background text-text'}`}>{item.team.name}</button>)}{!calendars.length && <p className="text-sm text-muted">Nenhum calendário cadastrado.</p>}</div>
-        </section>
-      </aside>
-      <div className="min-w-0">{calendar && <CalendarDetail calendar={calendar} canEdit={canEdit} busy={busy} mutate={mutate} />}</div>
-    </div>
-  </div>;
-}
-
-function CreateCalendar({ teams, busy, onSubmit }) {
-  return <form className="rounded-2xl border border-border bg-white p-4 shadow-card" onSubmit={(event) => { event.preventDefault(); onSubmit(Object.fromEntries(new FormData(event.currentTarget))); }}>
-    <h2 className="font-extrabold">Novo calendário</h2>
-    <select name="teamId" required className="field mt-3"><option value="">Selecione a equipe</option>{teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select>
-    <input name="timezone" required defaultValue="America/Cuiaba" className="field mt-3" aria-label="Fuso horário IANA" />
-    <button disabled={busy} className="action-primary mt-3 w-full"><Plus size={18} />Criar calendário</button>
-  </form>;
-}
-
-function CalendarDetail({ calendar, canEdit, busy, mutate }) {
-  const drafts = calendar.versions.filter((version) => !version.publishedAt);
-  const published = calendar.versions.filter((version) => version.publishedAt);
-  const firstDraftId = drafts[0]?.id;
-  const [editingId, setEditingId] = useState(firstDraftId ?? 'new');
-  const editing = drafts.find((version) => version.id === editingId);
-  useEffect(() => { setEditingId(firstDraftId ?? 'new'); }, [calendar.id, firstDraftId]);
-  return <div className="space-y-5">
-    <section className="rounded-2xl border border-border bg-white p-5 shadow-card">
-      <div className="flex flex-wrap justify-between gap-3"><div><h2 className="text-xl font-extrabold">{calendar.team.name}</h2><p className="text-sm text-muted">{calendar.timezone} · controle de versão {calendar.version}</p></div><span className="rounded-full bg-brand-100 px-3 py-1 text-xs font-bold text-brand-900">{published.length ? 'Calendário ativo' : 'Sem versão publicada'}</span></div>
-    </section>
-    {canEdit && <section className="rounded-2xl border border-border bg-white p-5 shadow-card">
-      <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-extrabold">Configurar versão</h2><select className="field max-w-xs" value={editingId} onChange={(event) => setEditingId(event.target.value)}><option value="new">Nova versão</option>{drafts.map((version) => <option key={version.id} value={version.id}>Rascunho v{version.versionNumber}</option>)}</select></div>
-      <VersionForm key={`${calendar.id}-${editingId}-${calendar.version}`} calendar={calendar} version={editing} busy={busy} mutate={mutate} />
-    </section>}
-    <section className="rounded-2xl border border-border bg-white p-5 shadow-card">
-      <h2 className="text-xl font-extrabold">Histórico imutável</h2>
-      <div className="mt-4 space-y-3">{published.map((version) => <VersionSummary key={version.id} version={version} active={calendar.activeVersionId === version.id} />)}{!published.length && <p className="text-sm text-muted">Publique uma versão vigente para iniciar a contabilização por expediente.</p>}</div>
-    </section>
-  </div>;
-}
-
-function VersionForm({ calendar, version, busy, mutate }) {
-  const [effectiveFrom, setEffectiveFrom] = useState(localInput(version?.effectiveFrom) || new Date().toISOString().slice(0, 16));
-  const [schedules, setSchedules] = useState(version ? version.schedules.map((item) => ({ ...item, start: clock(item.startMinute), end: clock(item.endMinute) })) : initialSchedules());
-  const [exceptions, setExceptions] = useState(version ? version.exceptions.map((item) => ({ ...item, start: item.startMinute == null ? '08:00' : clock(item.startMinute), end: item.endMinute == null ? '17:00' : clock(item.endMinute) })) : []);
-  const payload = () => ({
-    expectedVersion: calendar.version,
-    ...(version ? {} : { effectiveFrom: new Date(effectiveFrom).toISOString() }),
-    schedules: schedules.map(({ weekday, start, end }) => ({ weekday: Number(weekday), startMinute: minutes(start), endMinute: minutes(end) })),
-    exceptions: exceptions.map(({ localDate, type, start, end, description }) => ({ localDate, type, description, ...(type === 'WORKING_PERIOD' ? { startMinute: minutes(start), endMinute: minutes(end) } : {}) })),
-  });
-  const save = (event) => { event.preventDefault(); mutate(`/calendars/${calendar.id}/versions${version ? `/${version.id}` : ''}`, payload(), version ? 'PUT' : 'POST'); };
-  return <form className="mt-5 space-y-6" onSubmit={save}>
-    {!version && <label className="block text-sm font-bold">Início da vigência<input type="datetime-local" required value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} className="field mt-2" /></label>}
-    {version && <p className="text-sm text-muted">Vigência planejada: {new Date(version.effectiveFrom).toLocaleString('pt-BR')}. O início não muda depois da criação do rascunho.</p>}
-    <div><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-extrabold">Expediente semanal</h3><button type="button" className="action-secondary" onClick={() => setSchedules([...schedules, { weekday: 1, start: '08:00', end: '12:00' }])}><Plus size={17} />Período</button></div><div className="mt-3 space-y-2">{schedules.map((row, index) => <div className="grid grid-cols-2 sm:grid-cols-[1fr_6.5rem_6.5rem_2.75rem] gap-2" key={index}><select className="field" value={row.weekday} onChange={(event) => setSchedules(schedules.map((item, position) => position === index ? { ...item, weekday: Number(event.target.value) } : item))}>{weekdays.map((day, position) => <option key={day} value={position + 1}>{day}</option>)}</select><input className="field" type="time" value={row.start} onChange={(event) => setSchedules(schedules.map((item, position) => position === index ? { ...item, start: event.target.value } : item))} /><input className="field" type="time" value={row.end} onChange={(event) => setSchedules(schedules.map((item, position) => position === index ? { ...item, end: event.target.value } : item))} /><button type="button" aria-label="Remover período" className="grid min-h-11 place-items-center rounded-xl text-danger" onClick={() => setSchedules(schedules.filter((_, position) => position !== index))}><Trash2 size={18} /></button></div>)}</div></div>
-    <div><div className="flex items-center justify-between"><div><h3 className="font-extrabold">Exceções</h3><p className="text-xs text-muted">Feriados sempre anulam todo o dia.</p></div><button type="button" className="action-secondary" onClick={() => setExceptions([...exceptions, { localDate: '', type: 'HOLIDAY', start: '08:00', end: '17:00', description: '' }])}><Plus size={17} />Exceção</button></div><div className="mt-3 space-y-3">{exceptions.map((row, index) => <div className="grid gap-2 rounded-xl bg-background p-3 sm:grid-cols-2" key={index}><input className="field" required type="date" value={row.localDate} onChange={(event) => setExceptions(exceptions.map((item, position) => position === index ? { ...item, localDate: event.target.value } : item))} /><select className="field" value={row.type} onChange={(event) => setExceptions(exceptions.map((item, position) => position === index ? { ...item, type: event.target.value } : item))}><option value="HOLIDAY">Feriado / sem expediente</option><option value="WORKING_PERIOD">Período excepcional</option></select>{row.type === 'WORKING_PERIOD' && <><input className="field" type="time" value={row.start} onChange={(event) => setExceptions(exceptions.map((item, position) => position === index ? { ...item, start: event.target.value } : item))} /><input className="field" type="time" value={row.end} onChange={(event) => setExceptions(exceptions.map((item, position) => position === index ? { ...item, end: event.target.value } : item))} /></>}<input className="field sm:col-span-1" value={row.description} placeholder="Descrição" onChange={(event) => setExceptions(exceptions.map((item, position) => position === index ? { ...item, description: event.target.value } : item))} /><button type="button" className="action-danger" onClick={() => setExceptions(exceptions.filter((_, position) => position !== index))}><Trash2 size={17} />Remover</button></div>)}</div></div>
-    <div className="flex flex-wrap gap-3"><button disabled={busy || !schedules.length} className="action-primary"><Check size={18} />Salvar rascunho</button>{version && <button type="button" disabled={busy || new Date(version.effectiveFrom) > new Date()} className="action-secondary" onClick={() => mutate(`/calendars/${calendar.id}/versions/${version.id}/publish`, { expectedVersion: calendar.version })}><CalendarDays size={18} />Publicar versão</button>}</div>
-    {version && new Date(version.effectiveFrom) > new Date() && <p className="text-sm font-semibold text-warning">Esta versão futura permanecerá em rascunho até a publicação manual na data de vigência.</p>}
-  </form>;
-}
-
-function VersionSummary({ version, active }) {
-  return <article className="rounded-xl border border-border p-4"><div className="flex flex-wrap justify-between gap-2"><p className="font-extrabold">Versão {version.versionNumber}</p>{active && <span className="text-xs font-bold text-success">ATIVA</span>}</div><p className="mt-1 text-sm text-muted">De {new Date(version.effectiveFrom).toLocaleString('pt-BR')} {version.effectiveTo ? `até ${new Date(version.effectiveTo).toLocaleString('pt-BR')}` : 'em diante'}</p><p className="mt-2 text-sm">{version.schedules.length} período(s) semanais · {version.exceptions.length} exceção(ões)</p></article>;
+  );
 }

@@ -63,10 +63,27 @@ export const createOutboxService = ({ emailSender, config = env }) => {
       case 'EXTENSION_DENIED': {
         const request = await tx.taskRequest.findUnique({
           where: { id: payload.requestId },
-          select: { assignment: { select: { userId: true } }, decidedById: true },
+          select: {
+            assignment: { select: { userId: true } },
+            decidedById: true,
+            cycle: {
+              select: {
+                task: {
+                  select: {
+                    createdById: true,
+                    team: { select: { managers: { where: { endedAt: null }, select: { userId: true } } } },
+                  },
+                },
+              },
+            },
+          },
         });
         addUser(request?.assignment?.userId);
         addUser(request?.decidedById);
+        if (['RETURN_REQUESTED', 'EXTENSION_REQUESTED', 'TASK_REQUEST_CREATED'].includes(eventType)) {
+          addUser(request?.cycle?.task?.createdById);
+          request?.cycle?.task?.team?.managers?.forEach((m) => addUser(m.userId));
+        }
         break;
       }
       case 'DEADLINE_CHANGED': {
@@ -87,11 +104,26 @@ export const createOutboxService = ({ emailSender, config = env }) => {
           where: { id: payload.cycleId },
           select: {
             assignments: { where: { endedAt: null }, select: { userId: true } },
-            task: { select: { createdById: true } },
+            task: {
+              select: {
+                createdById: true,
+                team: { select: { managers: { where: { endedAt: null }, select: { userId: true } } } },
+              },
+            },
           },
         });
         cycle?.assignments.forEach((a) => addUser(a.userId));
         addUser(cycle?.task?.createdById);
+        if (['TASK_COMPLETED', 'TASK_REOPENED'].includes(eventType)) {
+          cycle?.task?.team?.managers?.forEach((m) => addUser(m.userId));
+        }
+        if (payload.previousCycleId) {
+          const prevCycle = await tx.taskCycle.findUnique({
+            where: { id: payload.previousCycleId },
+            select: { assignments: { orderBy: { assignedAt: 'desc' }, take: 1, select: { userId: true } } },
+          });
+          prevCycle?.assignments?.forEach((a) => addUser(a.userId));
+        }
         break;
       }
       case 'TASK_DEADLINE_SOON':
@@ -119,6 +151,12 @@ export const createOutboxService = ({ emailSender, config = env }) => {
       TASK_REQUEST_CREATED: 'Solicitação de devolução ou prorrogação',
       TASK_REQUEST_APPROVED: 'Solicitação aprovada',
       TASK_REQUEST_DENIED: 'Solicitação negada',
+      RETURN_REQUESTED: 'Solicitação de devolução',
+      EXTENSION_REQUESTED: 'Solicitação de prorrogação de prazo',
+      RETURN_APPROVED: 'Devolução de tarefa aprovada',
+      RETURN_DENIED: 'Devolução de tarefa negada',
+      EXTENSION_APPROVED: 'Prorrogação de prazo aprovada',
+      EXTENSION_DENIED: 'Prorrogação de prazo negada',
       DEADLINE_CHANGED: 'Prazo alterado',
       TASK_COMPLETED: 'Tarefa concluída',
       TASK_CANCELLED: 'Tarefa cancelada',
@@ -131,7 +169,7 @@ export const createOutboxService = ({ emailSender, config = env }) => {
   };
 
   const bodyForEvent = (eventType, payload, appBaseUrl) => {
-    const taskUrl = `${appBaseUrl}/tarefas/${payload.taskId}`;
+    const taskUrl = `${appBaseUrl}/kanban/tarefas/${payload.taskId}`;
     const bodies = {
       TASK_ASSIGNED: `Você foi atribuído à tarefa #${payload.publicNumber ?? payload.taskId}. ${payload.reason ?? ''} Acesse: ${taskUrl}`,
       TASK_REASSIGNED: `A tarefa #${payload.publicNumber ?? payload.taskId} foi reatribuída para você. ${payload.reason ?? ''} Acesse: ${taskUrl}`,
@@ -140,6 +178,12 @@ export const createOutboxService = ({ emailSender, config = env }) => {
       TASK_REQUEST_CREATED: `Nova solicitação para a tarefa #${payload.publicNumber ?? payload.taskId}: ${payload.requestType}. Motivo: ${payload.reason ?? ''} Acesse: ${taskUrl}`,
       TASK_REQUEST_APPROVED: `Solicitação aprovada para a tarefa #${payload.publicNumber ?? payload.taskId}. Acesse: ${taskUrl}`,
       TASK_REQUEST_DENIED: `Solicitação negada para a tarefa #${payload.publicNumber ?? payload.taskId}. Motivo: ${payload.decisionReason ?? ''} Acesse: ${taskUrl}`,
+      RETURN_REQUESTED: `Devolução solicitada para a tarefa #${payload.publicNumber ?? payload.taskId}. Acesse: ${taskUrl}`,
+      EXTENSION_REQUESTED: `Prorrogação de prazo solicitada para a tarefa #${payload.publicNumber ?? payload.taskId}. Acesse: ${taskUrl}`,
+      RETURN_APPROVED: `A devolução da tarefa #${payload.publicNumber ?? payload.taskId} foi aprovada. Acesse: ${taskUrl}`,
+      RETURN_DENIED: `A devolução da tarefa #${payload.publicNumber ?? payload.taskId} foi negada. Acesse: ${taskUrl}`,
+      EXTENSION_APPROVED: `A prorrogação da tarefa #${payload.publicNumber ?? payload.taskId} foi aprovada. Acesse: ${taskUrl}`,
+      EXTENSION_DENIED: `A prorrogação da tarefa #${payload.publicNumber ?? payload.taskId} foi negada. Acesse: ${taskUrl}`,
       DEADLINE_CHANGED: `O prazo da tarefa #${payload.publicNumber ?? payload.taskId} foi alterado. Acesse: ${taskUrl}`,
       TASK_COMPLETED: `A tarefa #${payload.publicNumber ?? payload.taskId} foi concluída. Acesse: ${taskUrl}`,
       TASK_CANCELLED: `A tarefa #${payload.publicNumber ?? payload.taskId} foi cancelada. Motivo: ${payload.reason ?? ''} Acesse: ${taskUrl}`,

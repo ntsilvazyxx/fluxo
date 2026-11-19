@@ -6,7 +6,7 @@ import { validate } from '../../middlewares/validate.js';
 import { asyncHandler } from '../../shared/http/async-handler.js';
 import { createDashboardController } from './dashboard.controller.js';
 import { createDashboardService } from './dashboard.service.js';
-import { dashboardSchema, reportSchema } from './dashboard.schemas.js';
+import { dashboardSchema, reportExportSchema, reportSchema } from './dashboard.schemas.js';
 
 const createController = (dependencies) => createDashboardController({ service: createDashboardService(dependencies) });
 const secure = (router, dependencies) => {
@@ -27,5 +27,6 @@ export const createReportRouter = (dependencies) => {
   secure(router, dependencies);
   const controller = createController(dependencies);
   router.get('/', validate(reportSchema), asyncHandler(controller.report));
+  router.get('/export', validate(reportExportSchema), asyncHandler(controller.exportCsv));
   return router;
 };

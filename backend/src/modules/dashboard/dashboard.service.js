@@ -155,4 +155,68 @@ export const createDashboardService = ({ prisma }) => ({
       meta: { page: filters.page, pageSize: filters.pageSize, total, totalPages: Math.ceil(total / filters.pageSize) },
     };
   },
+
+  async exportCsv(actor, filters) {
+    const reportData = await this.report(actor, { ...filters, page: 1, pageSize: 2000 });
+    const statusMap = {
+      PENDING: 'Pendente',
+      AWAITING_ACCEPTANCE: 'Aguardando aceite',
+      IN_PROGRESS: 'Em andamento',
+      COMPLETED: 'Concluída',
+      CANCELLED: 'Cancelada',
+    };
+    const priorityMap = {
+      LOW: 'Baixa',
+      NORMAL: 'Normal',
+      HIGH: 'Alta',
+      URGENT: 'Urgente',
+    };
+
+    const sanitize = (val) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).trim();
+      const escaped = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+      return `"${escaped.replace(/"/g, '""')}"`;
+    };
+
+    const formatDate = (val) => {
+      if (!val) return '';
+      const d = new Date(val);
+      return isNaN(d.getTime()) ? '' : d.toLocaleDateString('pt-BR');
+    };
+
+    const header = [
+      'Número',
+      'Título',
+      'Equipe',
+      'Responsável',
+      'Status',
+      'Prioridade',
+      'Data de Abertura',
+      'Prazo',
+      'Data de Encerramento',
+      'Situação',
+    ].map(sanitize).join(';');
+
+    const rows = reportData.rows.map((row) => [
+      `#${row.publicNumber}`,
+      row.title,
+      row.team?.name ?? '',
+      row.responsible?.name ?? 'Não atribuído',
+      statusMap[row.status] ?? row.status,
+      priorityMap[row.priority] ?? row.priority,
+      formatDate(row.openedAt),
+      row.deadlineAt ? new Date(row.deadlineAt).toLocaleString('pt-BR') : 'Sem prazo',
+      formatDate(row.closedAt),
+      row.overdue ? 'Atrasada' : 'No prazo',
+    ].map(sanitize).join(';'));
+
+    const csvContent = '\uFEFF' + [header, ...rows].join('\r\n');
+    const dateStr = new Date().toISOString().slice(0, 10);
+    return {
+      filename: `relatorio-tarefas-seaf-${dateStr}.csv`,
+      csv: csvContent,
+      count: reportData.rows.length,
+    };
+  },
 });

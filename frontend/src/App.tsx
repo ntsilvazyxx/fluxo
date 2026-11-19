@@ -13,6 +13,7 @@ const UsersPage = lazy(() => import('./pages/UsersPage.tsx').then((module) => ({
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage.tsx').then((module) => ({ default: module.DashboardPage })));
 const ReportsPage = lazy(() => import('./pages/ReportsPage.tsx').then((module) => ({ default: module.ReportsPage })));
+const CalendarPage = lazy(() => import('./pages/CalendarPage.tsx').then((module) => ({ default: module.CalendarPage })));
 const PasswordRecoveryPage = lazy(() => import('./pages/PasswordRecoveryPage.tsx').then((module) => ({ default: module.PasswordRecoveryPage })));
 
 function Protected({ children }) {
@@ -50,6 +51,7 @@ function AppRoutes() {
       <Route path="dashboard" element={<Roles allowed={analysts}><LoadingPage><DashboardPage /></LoadingPage></Roles>} />
       <Route path="relatorios" element={<Roles allowed={analysts}><LoadingPage><ReportsPage /></LoadingPage></Roles>} />
       <Route path="kanban" element={<KanbanPage />} />
+      <Route path="calendario" element={<LoadingPage><CalendarPage /></LoadingPage>} />
       <Route path="kanban/tarefas/:id" element={<TaskDetailPage />} />
       <Route path="minhas-tarefas" element={<Roles allowed={['TECHNICIAN']}><KanbanPage /></Roles>} />
       <Route path="historico" element={<TaskHistoryPage />} />

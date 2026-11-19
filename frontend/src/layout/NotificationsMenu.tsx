@@ -31,6 +31,16 @@ export function NotificationsMenu() {
   }, [request]);
 
   useEffect(() => {
+    void loadNotifications();
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        void loadNotifications();
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [loadNotifications]);
+
+  useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setNoticeOpen(false);
     };

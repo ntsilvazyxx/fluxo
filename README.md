@@ -1,87 +1,120 @@
 # SEAF — Sistema de Gestão e Acompanhamento de Tarefas
 
-Base técnica do sistema institucional para gestão de tarefas administrativas da Secretaria de Estado de Agricultura Familiar de Mato Grosso.
+Base técnica e operacional do sistema institucional para gestão e acompanhamento de tarefas administrativas da Secretaria de Estado de Agricultura Familiar de Mato Grosso (SEAF-MT).
 
-> Estado atual: **Fase 9 — Homologação final e preparação para implantação**. Consulte `docs/PHASE-9-VALIDATION.md` para resultados e bloqueios operacionais. A implantação não está autorizada.
+> **Estado da Versão:** **Homologação Final Concluída (Fim do Plano Emergencial de 3 Dias)**.  
+> Sistema estabilizado, integrado de ponta a ponta, seguro e validado em ambiente funcional com banco MariaDB real (`seaf_gestao_functional`) e interface real no Google Chrome.
 
-## Stack
+---
 
-- Frontend: React + Vite, TypeScript/TSX e Tailwind CSS, com abordagem mobile-first.
-- Backend: Node.js + Express, JavaScript ESM e arquitetura de monólito modular (permanece em JavaScript).
-- Persistência em MariaDB 10.11 + Prisma ORM.
-- Workspaces npm para executar e validar as duas aplicações pela raiz.
+## Sumário das Entregas (Plano Emergencial de 3 Dias)
 
-## TypeScript no frontend
+### Dia 1 — Central de Notificações e Operação Estabilizada
+- **Central de Notificações:** Notificações em tempo real com polling controlado de 30s (com verificação de aba visível e suspensão automática quando inativa).
+- **Outbox Worker:** Mapeamento de eventos de ciclo de vida (`RETURN_REQUESTED`, `EXTENSION_REQUESTED`, atribuições e decisões) com deep-link direto para `/kanban/tarefas/:id`.
+- **Subtarefas (Decisão Opção B):** Criação de novas subtarefas aposentada nesta entrega (`HTTP 410 GONE`); integridade histórica e consulta de subtarefas legadas 100% preservadas.
 
-O frontend utiliza TypeScript/TSX. O `tsconfig.json` mantém `strict: false` temporariamente, mas a verificação semântica é real: `noCheck` não é usado. Execute `npm run typecheck --workspace frontend`. Os contratos JSON existentes da API foram preservados.
+### Dia 2 — Calendário Visual e Exportações de Relatórios
+- **Calendário Visual de Tarefas:** Nova rota `/calendario` e endpoint `GET /api/v1/tasks/calendar`. Alternância entre visualizações Mensal e Semanal, filtros dinâmicos por status e prioridade, marcação de feriados/pontos facultativos de Mato Grosso e integração total com `TaskDetailModal`.
+- **Exportação Excel e PDF:**
+  - **Excel:** Exportação em formato CSV com UTF-8 BOM (`\uFEFF`) e delimitador `;`, compatível diretamente com o Microsoft Excel em português do Brasil sem telas de assistente de importação. Proteção contra injeção de fórmulas (escape de `=`, `+`, `-`, `@`, `\t`, `\r`).
+  - **PDF:** Impressão institucional otimizada com `@media print`, incluindo cabeçalho institucional SEAF-MT, dados da auditoria e remoção automática de menus e botões.
 
-## Pré-requisitos
+### Dia 3 — Homologação Completa, Segurança e Backup
+- **Homologação dos 4 Perfis RBAC:** Sessões independentes validadas (`ADMIN_MASTER`, `SECRETARY`, `MANAGER`, `TECHNICIAN`). Isolamento rigoroso de permissões e escopo de tarefas.
+- **Ciclo de Vida Ponta a Ponta:** Criação com número SIGADOC, reatribuição, aceite, solicitação/aprovação de prorrogação, conclusão com texto e reabertura em novo ciclo com auditoria imutável.
+- **Kanban e Paleta Avançada:** Arraste de cartões pelo corpo inteiro via `@dnd-kit`, paleta compacta com prévia, matriz de saturação/brilho, barra de matiz, input HEX e contraste dinâmico de texto (preto/branco) de acordo com luminância WCAG.
+- **Backup e Restauração Isolada:** Procedimento validado via `mysqldump` com restauração teste e verificação de integridade linha por linha.
 
-- Node.js 22.12 ou superior (ambiente validado: Node.js 24.16).
-- npm 10 ou superior.
-- MariaDB 10.11 ou superior.
+---
 
-## Instalação
+## Perfis de Usuário e Matriz de Permissões (RBAC)
 
-Na raiz do repositório:
+| Perfil | Acesso ao Kanban / Tarefas | Criação com SIGADOC | Aprovar Prorrogação / Devolução | Relatórios & Exportação | Gestão de Usuários |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **ADMIN_MASTER** | Visão do sistema / Pessoal | Não (perfil administrativo puro) | Não | Acesso restrito | Sim (com justificativa de auditoria) |
+| **SECRETARY** | Visão global da Secretaria | Sim (todas as equipes) | Sim (qualquer equipe) | Sim (Global) | Visualização (criação e edição restrita ao Admin) |
+| **MANAGER** | Visão da Equipe sob sua gestão | Sim (equipe gerenciada) | Sim (sua equipe) | Sim (apenas sua equipe) | Bloqueado (`HTTP 403`) |
+| **TECHNICIAN** | Visão estrita das tarefas atribuídas | Bloqueado (`HTTP 403`) | Bloqueado (`HTTP 403`) | Bloqueado (`HTTP 403`) | Bloqueado (`HTTP 403`) |
 
-```bash
-npm install
-```
+---
 
-Crie o arquivo de ambiente local a partir do exemplo:
+## Procedimento de Inicialização e Operação
 
-PowerShell:
+### Pré-requisitos
+- **Node.js:** versão 22.12 ou superior (validado em Node.js 24.16).
+- **MariaDB / MySQL:** versão 10.11 ou superior (rodando na porta 3306).
+- **Navegador Moderno:** Google Chrome, Microsoft Edge ou Firefox.
+
+### 1. Inicialização dos Serviços em Desenvolvimento
+Na raiz do projeto (`C:\Projetos\Fluxo`):
 
 ```powershell
-Copy-Item .env.example .env
-```
-
-Linux/macOS:
-
-```bash
-cp .env.example .env
-```
-
-O valor de `DATABASE_URL` no exemplo é fictício. Ajuste-o somente no `.env` local, que é ignorado pelo Git. Nenhuma credencial real deve ser adicionada ao `.env.example`.
-
-## Desenvolvimento
-
-Inicie frontend e backend em paralelo:
-
-```bash
+# Execução paralela de Frontend e Backend
 npm run dev
 ```
 
-Serviços locais:
-
-- Interface: `http://localhost:5173`
-- API: `http://localhost:3001/api/v1`
-- Health check: `http://localhost:3001/api/v1/health`
-
-Também é possível iniciar cada aplicação separadamente:
-
-```bash
-npm run dev:frontend
+Ou em terminais separados:
+```powershell
+# Terminal 1 - Backend API (porta 3001)
 npm run dev:backend
+
+# Terminal 2 - Frontend Vite (porta 5173)
+npm run dev:frontend
 ```
 
-## Validações
+Serviços disponíveis:
+- **Interface Web:** `http://localhost:5173`
+- **API REST v1:** `http://localhost:3001/api/v1`
+- **Health Check:** `http://localhost:3001/api/v1/health`
 
-Execute todas as verificações que não exigem conexão MySQL:
+---
 
-```bash
+## Procedimento Homologado de Backup e Restauração
+
+O procedimento de backup do banco de dados institucional preserva triggers de auditoria (`trg_audit_events_append_only_update`), rotinas, chaves estrangeiras e integridade referencial.
+
+### 1. Gerar Backup (Dump)
+```powershell
+# Exemplo com utilitário mysqldump
+mysqldump -h 127.0.0.1 -P 3306 -u root --single-transaction --routines --triggers seaf_gestao_functional > "C:\Projetos\Fluxo\banco\backup_homologacao_$(Get-Date -Format 'yyyyMMdd').sql"
+```
+
+### 2. Restaurar Banco a partir de Backup
+```powershell
+# 1. Criar o banco de destino caso não exista
+mysql -h 127.0.0.1 -P 3306 -u root -e "CREATE DATABASE IF NOT EXISTS seaf_gestao_functional CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+# 2. Restaurar conteúdo
+mysql -h 127.0.0.1 -P 3306 -u root seaf_gestao_functional < "C:\Projetos\Fluxo\banco\backup_homologacao_20261119.sql"
+```
+
+> **Evidência de Homologação:** O script automatizado `scratch/backup_and_test_restore.mjs` testou a restauração em banco isolado temporário (`seaf_gestao_test_restore`), confirmando paridade exata de todas as 33 tabelas e registros (19 tarefas e 9 usuários restaurados sem divergências).
+
+---
+
+## Suíte de Testes e Validação de Qualidade
+
+Para executar a validação estática e os testes automatizados da aplicação:
+
+```powershell
+# Validação completa (lint, testes e build)
 npm run check
+
+# Execução individual de testes
+npm run test --workspace backend    # 223 testes automatizados
+npm run test --workspace frontend   # 139 testes automatizados
+npm run build --workspace frontend  # Build de produção Vite (0 erros)
 ```
 
-Ou execute cada etapa isoladamente:
+---
 
-```bash
-npm run lint
-npm run test
-npm run build
-npm run prisma:validate
-```
+## Stack Tecnológica
+
+- **Frontend:** React 19, TypeScript/TSX, Vite, Tailwind CSS, `@dnd-kit`, Lucide React.
+- **Backend:** Node.js (ESM), Express, Prisma ORM, Zod, Helmet, CORS, Rate Limit.
+- **Banco de Dados:** MariaDB 10.11 / MySQL.
+- **Arquitetura de Segurança:** Autenticação via JWT, Refresh Token em cookies HttpOnly/SameSite, RBAC por perfil, trilha de auditoria append-only imutável.
 
 ### Homologação isolada da Fase 9
 

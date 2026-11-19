@@ -9,6 +9,8 @@ export const ALLOWED_CARD_COLORS = [
   'orange',
 ];
 
+export const HEX_COLOR_REGEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
 export const listKanbanColorsSchema = z.object({
   params: z.object({}),
   query: z.object({
@@ -23,7 +25,12 @@ export const updateKanbanColorSchema = z.object({
   }),
   query: z.object({}),
   body: z.object({
-    color: z.enum([...ALLOWED_CARD_COLORS, 'default']).nullable(),
+    color: z
+      .union([
+        z.enum([...ALLOWED_CARD_COLORS, 'default']),
+        z.string().regex(HEX_COLOR_REGEX, 'Formato hexadecimal inválido. Use #RGB ou #RRGGBB.'),
+      ])
+      .nullable(),
   }),
 });
 

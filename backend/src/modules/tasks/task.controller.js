@@ -7,6 +7,7 @@ const sendMutation = async (response, promise) => {
 };
 export const createTaskController = ({ service }) => ({
   list: async (req,res)=>{const result=await service.list(req.auth,req.validated.query,'all');res.json({data:{tasks:result.tasks},meta:result.meta});},
+  calendar: async (req,res)=>res.json({data:await service.calendar(req.auth,req.validated.query)}),
   kanban: async (req,res)=>{const result=await service.list(req.auth,req.validated.query,'kanban');res.json({data:{tasks:result.tasks},meta:result.meta});},
   history: async (req,res)=>{const result=await service.list(req.auth,req.validated.query,'history');res.json({data:{tasks:result.tasks},meta:result.meta});},
   mine: async (req,res)=>{const result=await service.list(req.auth,req.validated.query,'mine');res.json({data:{tasks:result.tasks},meta:result.meta});},

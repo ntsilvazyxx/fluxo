@@ -43,6 +43,18 @@ export const listTasksSchema = z.object({
   }),
 });
 
+export const taskCalendarSchema = z.object({
+  body: empty,
+  params: empty,
+  query: z.object({
+    month: z.string().regex(/^\d{4}-\d{2}$/, 'Mês deve estar no formato AAAA-MM').optional(),
+    start: z.coerce.date().optional(),
+    end: z.coerce.date().optional(),
+    teamId: uuid.optional(),
+    responsibleId: uuid.optional(),
+  }),
+});
+
 export const taskIdSchema = z.object({
   body: empty,
   params: z.object({ id: uuid }),

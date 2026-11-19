@@ -76,6 +76,8 @@ export const createPreferenceService = ({ prisma }) => ({
       return { taskId, color: null };
     }
 
+    const normalizedColor = typeof color === 'string' && color.startsWith('#') ? color.toLowerCase() : color;
+
     const updated = await prisma.userTaskPreference.upsert({
       where: {
         userId_taskId: {
@@ -87,10 +89,10 @@ export const createPreferenceService = ({ prisma }) => ({
         id: randomUUID(),
         userId: actor.userId,
         taskId,
-        color,
+        color: normalizedColor,
       },
       update: {
-        color,
+        color: normalizedColor,
       },
       select: {
         taskId: true,

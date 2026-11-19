@@ -29,3 +29,13 @@ export const reportSchema = z.object({
     sortDirection: z.enum(['asc', 'desc']).default('desc'),
   }),
 });
+
+export const reportExportSchema = z.object({
+  body: z.object({}),
+  params: z.object({}),
+  query: baseFilters.extend({
+    search: z.string().trim().max(255).optional(),
+    sortBy: z.enum(['openedAt', 'closedAt', 'deadlineAt', 'priority', 'status', 'publicNumber']).default('openedAt'),
+    sortDirection: z.enum(['asc', 'desc']).default('desc'),
+  }),
+});

@@ -310,4 +310,68 @@ const sampleTask = (id: string, publicNumber: string, title: string, status = 'A
                     // Cartão 1 DEVE CONTINUAR VERDE
                     expect(card1.style.backgroundColor).toBe('rgb(220, 252, 231)');
                   });
+
+                  it('8. Aplica cor customizada via Paleta Avançada e persiste HEX no backend', async () => {
+                    const serverDb = setupServerMock();
+
+                    render(
+                      <MemoryRouter initialEntries={['/kanban']}>
+                        <KanbanPage />
+                      </MemoryRouter>,
+                    );
+
+                    await screen.findByRole('heading', { name: 'Tarefa Alfa' });
+                    const card1 = document.querySelector('article[data-task-id="task-uuid-1"]') as HTMLElement;
+
+                    // Abre paleta padrão
+                    fireEvent.click(screen.getByRole('button', { name: 'Personalizar cor da tarefa #101' }));
+
+                    // Clica em "Mais cores" para abrir a paleta avançada
+                    fireEvent.click(screen.getByRole('button', { name: 'Abrir paleta avançada' }));
+
+                    // Diálogo avançado visível
+                    expect(screen.getByRole('dialog', { name: 'Paleta avançada de cores' })).toBeInTheDocument();
+
+                    // Digita cor personalizada
+                    const hexInput = screen.getByLabelText('Código hexadecimal da cor');
+                    fireEvent.change(hexInput, { target: { value: '#10b981' } });
+
+                    // Clica em Aplicar cor
+                    fireEvent.click(screen.getByRole('button', { name: 'Aplicar cor' }));
+
+                    // Diálogo fechado e cor aplicada
+                    await waitFor(() => {
+                      expect(card1.style.backgroundColor).toBe('rgb(16, 185, 129)');
+                      expect(serverDb['task-uuid-1']).toBe('#10b981');
+                    });
+                  });
+
+                  it('9. Aplica cor escura customizada e valida ajuste automático de contraste (WCAG)', async () => {
+                    setupServerMock();
+
+                    render(
+                      <MemoryRouter initialEntries={['/kanban']}>
+                        <KanbanPage />
+                      </MemoryRouter>,
+                    );
+
+                    await screen.findByRole('heading', { name: 'Tarefa Alfa' });
+                    const card1 = document.querySelector('article[data-task-id="task-uuid-1"]') as HTMLElement;
+
+                    fireEvent.click(screen.getByRole('button', { name: 'Personalizar cor da tarefa #101' }));
+                    fireEvent.click(screen.getByRole('button', { name: 'Abrir paleta avançada' }));
+
+                    // Digita cor escura (Azul SEAF #1A3281)
+                    const hexInput = screen.getByLabelText('Código hexadecimal da cor');
+                    fireEvent.change(hexInput, { target: { value: '#1a3281' } });
+                    fireEvent.click(screen.getByRole('button', { name: 'Aplicar cor' }));
+
+                    await waitFor(() => {
+                      expect(card1.style.backgroundColor).toBe('rgb(26, 50, 129)');
+                    });
+
+                    // Verifica que o título recebeu a classe text-white e o número text-sky-300
+                    const title = card1.querySelector('h3');
+                    expect(title).toHaveClass('text-white');
+                  });
                 });

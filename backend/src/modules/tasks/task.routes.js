@@ -9,7 +9,7 @@ import { createAttachmentStorage } from '../attachments/attachment.storage.js';
 import { createAttachmentService } from '../attachments/attachment.service.js';
 import { createTaskController } from './task.controller.js';
 import { createTaskService } from './task.service.js';
-import { assignTaskSchema, assignmentActionSchema, cancelTaskSchema, completeTaskSchema, createTaskSchema, listTasksSchema, rejectAssignmentSchema, restartTaskSchema, taskIdSchema, updateTaskSchema } from './task.schemas.js';
+import { assignTaskSchema, assignmentActionSchema, cancelTaskSchema, completeTaskSchema, createTaskSchema, listTasksSchema, rejectAssignmentSchema, restartTaskSchema, taskCalendarSchema, taskIdSchema, updateTaskSchema } from './task.schemas.js';
 
 const authenticated = (router, prisma, config) => router.use(authenticate({ prisma, config }));
 const adminTaskCreation = (config) => (request, _response, next) => {
@@ -23,6 +23,7 @@ export const createTaskRouter = ({ prisma, config }) => {
   const attachmentService=createAttachmentService({prisma,storage:createAttachmentStorage(config.attachmentStoragePath??config.imageStoragePath),ttlMinutes:config.attachmentStagingTtlMinutes});
   const router=Router(),controller=createTaskController({service:createTaskService({prisma,attachmentService})});authenticated(router,prisma,config);
   router.get('/',validate(listTasksSchema),asyncHandler(controller.list));
+  router.get('/calendar',validate(taskCalendarSchema),asyncHandler(controller.calendar));
   router.post('/',requireRoles('ADMIN_MASTER','SECRETARY','MANAGER'),adminTaskCreation(config),validate(createTaskSchema),asyncHandler(controller.create));
   router.get('/:id',validate(taskIdSchema),asyncHandler(controller.detail));
   router.patch('/:id',requireRoles('ADMIN_MASTER','SECRETARY','MANAGER'),validate(updateTaskSchema),asyncHandler(controller.update));
