@@ -1,4 +1,26 @@
-export const createChatController = ({ chatService, participantService, messageService, lockService }) => ({
+import { rm } from 'node:fs/promises';
+import path from 'node:path';
+import { AppError } from '../../shared/errors/app-error.js';
+
+const cleanupUploadedTempFile = (file) => {
+  if (!file?.path) return;
+  rm(file.path, { force: true })
+    .then(() => {
+      const parent = path.dirname(file.path);
+      if (parent && path.basename(parent).startsWith('seaf-chat-staged-')) {
+        return rm(parent, { recursive: true, force: true });
+      }
+    })
+    .catch(() => undefined);
+};
+
+export const createChatController = ({
+  chatService,
+  participantService,
+  messageService,
+  lockService,
+  attachmentService,
+}) => ({
   async getConversation(req, res) {
     const data = await chatService.getConversation(
       req.auth,
@@ -50,7 +72,8 @@ export const createChatController = ({ chatService, participantService, messageS
       req.validated.params.taskId,
       req.validated.body,
     );
-    res.status(201).json({ data });
+    const status = data?.status === 'PENDING' ? 202 : 201;
+    res.status(status).json({ data });
   },
 
   async listMessages(req, res) {
@@ -79,6 +102,48 @@ export const createChatController = ({ chatService, participantService, messageS
       taskId,
       body,
     );
+    res.status(200).json({ data });
+  },
+
+  async stageAttachment(req, res) {
+    const file = req.file ?? req.files?.attachment?.[0] ?? req.files?.file?.[0];
+    try {
+      const clientUploadId = req.validated?.body?.clientUploadId
+        ?? req.body?.clientUploadId
+        ?? req.headers['x-client-upload-id']
+        ?? req.headers['idempotency-key'];
+
+      if (!file) {
+        throw new AppError(400, 'CHAT_ATTACHMENT_REQUIRED', 'Arquivo obrigatório.');
+      }
+      if (!clientUploadId) {
+        throw new AppError(400, 'CLIENT_UPLOAD_ID_REQUIRED', 'Identificador clientUploadId é obrigatório.');
+      }
+
+      const data = await attachmentService.stage(
+        req.auth,
+        req.validated?.params?.taskId ?? req.params.taskId,
+        clientUploadId,
+        file,
+        req.correlationId,
+      );
+      res.status(201).json({ data });
+    } finally {
+      cleanupUploadedTempFile(file);
+    }
+  },
+
+  async getStagedAttachment(req, res) {
+    const taskId = req.validated?.params?.taskId ?? req.params.taskId;
+    const uploadId = req.validated?.params?.uploadId ?? req.params.uploadId;
+    const data = await attachmentService.get(req.auth, taskId, uploadId);
+    res.status(200).json({ data });
+  },
+
+  async cancelStagedAttachment(req, res) {
+    const taskId = req.validated?.params?.taskId ?? req.params.taskId;
+    const uploadId = req.validated?.params?.uploadId ?? req.params.uploadId;
+    const data = await attachmentService.cancel(req.auth, taskId, uploadId, req.correlationId);
     res.status(200).json({ data });
   },
 });

@@ -8,7 +8,11 @@ try {
   process.exit(1);
 }
 
-const child = spawn(process.execPath, ['--test', 'test/chat/chat-real-homologation.test.js'], {
+const child = spawn(process.execPath, [
+  '--test',
+  'test/chat/chat-real-homologation.test.js',
+  'test/chat/chat-staging-real-homologation.test.js',
+], {
   stdio: 'inherit',
   env: process.env,
 });

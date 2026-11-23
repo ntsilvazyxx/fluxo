@@ -53,9 +53,14 @@ export const listLockEventsQuerySchema = z.object({
 export const sendMessageSchema = z.object({
   clientMessageId: uuidSchema,
   content: z.string().trim().max(10000, { message: 'Mensagem excede o limite de 10.000 caracteres.' }).nullable().optional(),
-  stagedAttachmentIds: z.array(uuidSchema).max(5, { message: 'Máximo de 5 anexos por mensagem.' }).default([]),
+  stagedAttachmentIds: z.array(uuidSchema)
+    .max(5, { message: 'Máximo de 5 anexos por mensagem.' })
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: 'Não são permitidos identificadores de anexo repetidos no mesmo envio.',
+    })
+    .default([]),
 }).strict().refine(
-  (data) => (data.content && data.content.length > 0) || (data.stagedAttachmentIds && data.stagedAttachmentIds.length > 0),
+  (data) => (Boolean(data.content && data.content.trim().length > 0) || (Array.isArray(data.stagedAttachmentIds) && data.stagedAttachmentIds.length > 0)),
   { message: 'A mensagem deve conter texto ou pelo menos um anexo.', path: ['content'] }
 );
 
@@ -148,5 +153,32 @@ export const adminLockRouteSchema = z.object({
 export const listLockEventsRouteSchema = z.object({
   params: taskIdParamSchema,
   query: listLockEventsQuerySchema,
+  body: emptySchema,
+});
+
+export const uploadIdParamSchema = z.object({
+  taskId: uuidSchema,
+  uploadId: uuidSchema,
+}).strict();
+
+export const stageAttachmentSchema = z.object({
+  clientUploadId: z.string().trim().min(1, 'clientUploadId é obrigatório.').max(128),
+}).passthrough();
+
+export const stageAttachmentRouteSchema = z.object({
+  params: taskIdParamSchema,
+  query: emptySchema,
+  body: stageAttachmentSchema,
+});
+
+export const getStagedAttachmentRouteSchema = z.object({
+  params: uploadIdParamSchema,
+  query: emptySchema,
+  body: emptySchema,
+});
+
+export const cancelStagedAttachmentRouteSchema = z.object({
+  params: uploadIdParamSchema,
+  query: emptySchema,
   body: emptySchema,
 });

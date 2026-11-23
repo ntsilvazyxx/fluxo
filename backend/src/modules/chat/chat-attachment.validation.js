@@ -25,6 +25,7 @@ const fail = (code, message, status = 422) => { throw new AppError(status, code,
 
 export function sanitizeChatAttachmentName(value) {
   const base = path.basename(String(value ?? '')).normalize('NFKC')
+    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f<>:"/\\|?*]/g, '_').replace(/[. ]+$/g, '').trim();
   if (!base || base === '.' || base === '..') fail('CHAT_ATTACHMENT_INVALID_NAME', 'Nome de arquivo inválido.', 400);
   return [...base].slice(0, 255).join('');

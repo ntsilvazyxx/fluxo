@@ -15,7 +15,160 @@ import {
   safeBigInt,
 } from './chat.presenter.js';
 
-export const createChatMessageService = ({ prisma }) => {
+export const createChatMessageService = ({
+  prisma,
+  storage = null,
+  _config = null,
+  now = () => new Date(),
+  id = randomUUID,
+}) => {
+  const MAX_ATTACHMENTS_PER_MESSAGE = 5;
+  const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024; // 20 MB
+  const MAX_TOTAL_ATTACHMENTS_BYTES = 50 * 1024 * 1024; // 50 MB
+
+  const validateAndOrderStagedUploads = async (client, conversationId, userId, stagedIds) => {
+    if (!stagedIds?.length) return [];
+    if (stagedIds.length > MAX_ATTACHMENTS_PER_MESSAGE) {
+      throw new AppError(400, 'INVALID_ATTACHMENT_COUNT', `Máximo de ${MAX_ATTACHMENTS_PER_MESSAGE} anexos por mensagem.`);
+    }
+    const uniqueIds = new Set(stagedIds);
+    if (uniqueIds.size !== stagedIds.length) {
+      throw new AppError(400, 'DUPLICATE_ATTACHMENT_IDS', 'Não são permitidos identificadores de anexo repetidos no mesmo envio.');
+    }
+
+    const uploads = await client.chatAttachmentUpload.findMany({
+      where: { id: { in: stagedIds } },
+    });
+
+    if (uploads.length !== stagedIds.length) {
+      throw new AppError(404, 'CHAT_ATTACHMENT_UPLOAD_NOT_FOUND', 'Um ou mais anexos de staging não foram encontrados.');
+    }
+
+    const uploadsMap = new Map(uploads.map((u) => [u.id, u]));
+    const ordered = stagedIds.map((stagedId) => uploadsMap.get(stagedId));
+
+    let totalBytes = 0;
+    const currentTime = now();
+
+    for (const upload of ordered) {
+      if (upload.conversationId !== conversationId) {
+        throw new AppError(403, 'FORBIDDEN', 'O anexo não pertence à conversa desta tarefa.');
+      }
+      if (upload.uploadedById !== userId) {
+        throw new AppError(403, 'FORBIDDEN', 'O anexo pertence a outro usuário.');
+      }
+      if (upload.expiresAt <= currentTime) {
+        throw new AppError(422, 'CHAT_ATTACHMENT_EXPIRED', 'Anexo expirado não pode ser consumido.');
+      }
+      if (['EXPIRED', 'REJECTED', 'FAILED'].includes(upload.status)) {
+        throw new AppError(422, 'CHAT_ATTACHMENT_NOT_ELIGIBLE', 'Anexo em estado inválido para vinculação.');
+      }
+      if (upload.status === 'PROMOTED') {
+        throw new AppError(409, 'CHAT_ATTACHMENT_ALREADY_CLAIMED', 'Anexo já promovido em outra mensagem.');
+      }
+      if (Number(upload.sizeBytes) > MAX_ATTACHMENT_BYTES) {
+        throw new AppError(413, 'CHAT_ATTACHMENT_TOO_LARGE', 'Arquivo excede o limite máximo permitido de 20MB.');
+      }
+      totalBytes += Number(upload.sizeBytes);
+    }
+
+    if (totalBytes > MAX_TOTAL_ATTACHMENTS_BYTES) {
+      throw new AppError(413, 'CHAT_ATTACHMENTS_TOTAL_TOO_LARGE', 'O tamanho total dos anexos da mensagem excede o limite de 50MB.');
+    }
+
+    return ordered;
+  };
+
+  const isMessageIdempotentMatch = (existing, payload, stagedAttachmentIds, actorUserId) => {
+    const authorMatches = existing.authorId === actorUserId;
+    const expectedContent = payload.content ? payload.content.trim() : '';
+    const actualContent = existing.content ? existing.content.trim() : '';
+    const contentMatches = actualContent === expectedContent;
+
+    const existingStagedIds = existing.attachments?.length
+      ? existing.attachments.map((a) => a.sourceUploadId).filter(Boolean)
+      : (existing.attachmentUploads?.map((u) => u.id) ?? []);
+
+    const attachmentsMatch = stagedAttachmentIds.length === existingStagedIds.length
+      && stagedAttachmentIds.every((attachId, idx) => attachId === existingStagedIds[idx]);
+
+    return authorMatches && contentMatches && attachmentsMatch;
+  };
+
+  const publishAttachmentsForMessage = async (messageRecord, orderedUploads, taskId) => {
+    // 1. Promover fisicamente cada anexo no storage
+    for (const upload of orderedUploads) {
+      const targetStorageKey = upload.targetStorageKey
+        || (storage ? storage.createObjectKey() : `objects/${upload.id.slice(0, 2)}/${upload.id}.object`);
+
+      if (storage && upload.status !== 'PROMOTED') {
+        await storage.promote(upload.stagingKey, targetStorageKey, {
+          sizeBytes: upload.sizeBytes,
+          sha256: upload.sha256,
+        });
+        const verified = await storage.exists(targetStorageKey);
+        if (!verified) {
+          throw new AppError(500, 'STORAGE_PROMOTION_FAILED', 'Falha ao verificar anexo promovido no storage definitivo.');
+        }
+      }
+      upload.targetStorageKey = targetStorageKey;
+    }
+
+    // 2. Transação para inserir attachments e publicar mensagem
+    const publishedMessage = await runCriticalTransaction(prisma, async (tx) => {
+      const existingAttachments = await tx.chatMessageAttachment.findMany({
+        where: { messageId: messageRecord.id },
+      });
+
+      if (!existingAttachments.length) {
+        for (let position = 0; position < orderedUploads.length; position++) {
+          const upload = orderedUploads[position];
+          await tx.chatMessageAttachment.create({
+            data: {
+              id: id(),
+              messageId: messageRecord.id,
+              sourceUploadId: upload.id,
+              uploadedById: upload.uploadedById,
+              position,
+              originalName: upload.originalName,
+              storagePath: upload.targetStorageKey,
+              mimeType: upload.mimeType,
+              sizeBytes: upload.sizeBytes,
+              sha256: upload.sha256,
+              origin: 'UPLOAD',
+            },
+          });
+
+          await tx.chatAttachmentUpload.update({
+            where: { id: upload.id },
+            data: {
+              status: 'PROMOTED',
+              promotedAt: now(),
+              targetStorageKey: upload.targetStorageKey,
+            },
+          });
+        }
+      }
+
+      const publishedNow = now();
+      return tx.chatMessage.update({
+        where: { id: messageRecord.id },
+        data: {
+          status: 'PUBLISHED',
+          publishedAt: publishedNow,
+          failureReason: null,
+        },
+        include: {
+          author: { include: { role: true } },
+          attachments: { orderBy: { position: 'asc' } },
+          conversation: { select: { taskId: true } },
+        },
+      });
+    });
+
+    return presentMessage(publishedMessage, { taskId });
+  };
+
   const sendMessage = async (actor, taskId, payload) => {
     // 1. Validar existência da tarefa
     const task = await prisma.task.findUnique({
@@ -74,9 +227,50 @@ export const createChatMessageService = ({ prisma }) => {
       throw new AppError(403, 'FORBIDDEN', 'Você não possui participação ativa nesta conversa para enviar mensagens.');
     }
 
-    // 6. Transação de envio com idempotência e sequência monotônica
-    return runCriticalTransaction(prisma, async (tx) => {
-      // 6.1 Idempotência pré-lock: verificar se clientMessageId já existe
+    const stagedAttachmentIds = Array.isArray(payload.stagedAttachmentIds) ? payload.stagedAttachmentIds : [];
+
+    // 6. Idempotência pré-lock: verificar se clientMessageId já existe
+    const existingPre = typeof prisma.chatMessage?.findUnique === 'function'
+      ? await prisma.chatMessage.findUnique({
+        where: {
+          conversationId_clientMessageId: {
+            conversationId: conversation.id,
+            clientMessageId: payload.clientMessageId,
+          },
+        },
+        include: {
+          author: { include: { role: true } },
+          attachments: { orderBy: { position: 'asc' } },
+          attachmentUploads: true,
+          conversation: { select: { taskId: true } },
+        },
+      })
+      : null;
+
+    if (existingPre) {
+      if (!isMessageIdempotentMatch(existingPre, payload, stagedAttachmentIds, actor.userId)) {
+        throw new AppError(409, 'IDEMPOTENCY_CONFLICT', 'O clientMessageId já foi utilizado com conteúdo diferente.');
+      }
+
+      if (existingPre.status === 'PUBLISHED') {
+        return presentMessage(existingPre, { taskId });
+      }
+    }
+
+    // 7. Validar previamente os uploads de staging se informados
+    let validatedUploads = [];
+    if (stagedAttachmentIds.length > 0) {
+      validatedUploads = await validateAndOrderStagedUploads(
+        prisma,
+        conversation.id,
+        actor.userId,
+        stagedAttachmentIds,
+      );
+    }
+
+    // 8. Transação de reserva com idempotência e sequência monotônica
+    const reservation = await runCriticalTransaction(prisma, async (tx) => {
+      // 8.1 Idempotência dentro da transação
       const existing = await tx.chatMessage.findUnique({
         where: {
           conversationId_clientMessageId: {
@@ -86,29 +280,31 @@ export const createChatMessageService = ({ prisma }) => {
         },
         include: {
           author: { include: { role: true } },
-          attachments: true,
+          attachments: { orderBy: { position: 'asc' } },
+          attachmentUploads: true,
           conversation: { select: { taskId: true } },
         },
       });
 
       if (existing) {
-        // Idempotência estrita: comparar payload e autor
-        const contentMatches = (existing.content ?? '') === (payload.content ?? '');
-        const authorMatches = existing.authorId === actor.userId;
-
-        if (contentMatches && authorMatches) {
-          return presentMessage(existing, { taskId });
+        if (!isMessageIdempotentMatch(existing, payload, stagedAttachmentIds, actor.userId)) {
+          throw new AppError(409, 'IDEMPOTENCY_CONFLICT', 'O clientMessageId já foi utilizado com conteúdo diferente.');
         }
 
-        throw new AppError(409, 'IDEMPOTENCY_CONFLICT', 'O clientMessageId já foi utilizado com conteúdo diferente.');
+        if (existing.status === 'PUBLISHED') {
+          return { published: presentMessage(existing, { taskId }) };
+        }
+
+        // Se está PENDING, retomar publicação
+        return { pending: existing, orderedUploads: validatedUploads };
       }
 
-      // 6.2 Serialização de concorrência com row lock na conversa
+      // 7.2 Serialização de concorrência com row lock na conversa
       if (typeof tx.$queryRaw === 'function') {
         await tx.$queryRaw`SELECT id FROM chat_conversations WHERE id = ${conversation.id} FOR UPDATE`;
       }
 
-      // 6.2.1 Re-validação transacional de bloqueio sob lock
+      // 7.2.1 Re-validação transacional de bloqueio sob lock
       if (typeof tx.chatLockState?.findUnique === 'function') {
         const currentLock = await tx.chatLockState.findUnique({
           where: { conversationId: conversation.id },
@@ -119,7 +315,7 @@ export const createChatMessageService = ({ prisma }) => {
         }
       }
 
-      // 6.2.2 Re-validação transacional de participação ativa sob lock
+      // 7.2.2 Re-validação transacional de participação ativa sob lock
       if (typeof tx.chatParticipant?.findUnique === 'function') {
         const activeParticipant = await tx.chatParticipant.findUnique({
           where: {
@@ -140,7 +336,7 @@ export const createChatMessageService = ({ prisma }) => {
         }
       }
 
-      // 6.3 Re-verificação de clientMessageId sob lock para fechar corrida simultânea
+      // 7.3 Re-verificação de clientMessageId sob lock para fechar corrida simultânea
       const lockedExisting = await tx.chatMessage.findUnique({
         where: {
           conversationId_clientMessageId: {
@@ -150,23 +346,38 @@ export const createChatMessageService = ({ prisma }) => {
         },
         include: {
           author: { include: { role: true } },
-          attachments: true,
+          attachments: { orderBy: { position: 'asc' } },
+          attachmentUploads: true,
           conversation: { select: { taskId: true } },
         },
       });
 
       if (lockedExisting) {
-        const contentMatches = (lockedExisting.content ?? '') === (payload.content ?? '');
-        const authorMatches = lockedExisting.authorId === actor.userId;
-
-        if (contentMatches && authorMatches) {
-          return presentMessage(lockedExisting, { taskId });
+        if (!isMessageIdempotentMatch(lockedExisting, payload, stagedAttachmentIds, actor.userId)) {
+          throw new AppError(409, 'IDEMPOTENCY_CONFLICT', 'O clientMessageId já foi utilizado com conteúdo diferente.');
         }
 
-        throw new AppError(409, 'IDEMPOTENCY_CONFLICT', 'O clientMessageId já foi utilizado com conteúdo diferente.');
+        if (lockedExisting.status === 'PUBLISHED') {
+          return { published: presentMessage(lockedExisting, { taskId }) };
+        }
+
+        return { pending: lockedExisting, orderedUploads: validatedUploads };
       }
 
-      // 6.4 Obter sequência máxima atual da conversa
+      // 7.4 Re-verificar que os uploads ainda estão disponíveis sob lock
+      if (validatedUploads.length > 0) {
+        for (const upload of validatedUploads) {
+          const currentUpload = await tx.chatAttachmentUpload.findUnique({
+            where: { id: upload.id },
+          });
+
+          if (!currentUpload || currentUpload.status !== 'READY' || currentUpload.messageId !== null) {
+            throw new AppError(409, 'CHAT_ATTACHMENT_ALREADY_CLAIMED', 'Um dos anexos já foi reivindicado concorrentemente.');
+          }
+        }
+      }
+
+      // 7.5 Obter sequência máxima atual da conversa
       const lastMessage = await tx.chatMessage.findFirst({
         where: { conversationId: conversation.id },
         orderBy: { sequenceNumber: 'desc' },
@@ -175,41 +386,26 @@ export const createChatMessageService = ({ prisma }) => {
 
       const nextSequence = lastMessage ? BigInt(lastMessage.sequenceNumber) + 1n : 1n;
 
-      // 6.5 Persistir nova mensagem publicada
-      const messageId = randomUUID();
-      const now = new Date();
+      // 7.6 Persistir nova mensagem
+      const messageId = id();
+      const currentTime = now();
+      const hasAttachments = validatedUploads.length > 0;
 
-      try {
-        const created = await tx.chatMessage.create({
-          data: {
-            id: messageId,
-            conversationId: conversation.id,
-            cycleId: task.currentCycleId,
-            authorId: actor.userId,
-            sequenceNumber: nextSequence,
-            clientMessageId: payload.clientMessageId,
-            content: payload.content ? payload.content.trim() : null,
-            status: 'PUBLISHED',
-            createdAt: now,
-            publishedAt: now,
-          },
-          include: {
-            author: { include: { role: true } },
-            attachments: true,
-            conversation: { select: { taskId: true } },
-          },
-        });
-
-        return presentMessage(created, { taskId });
-      } catch (err) {
-        // Concorrência defensiva: captura de P2002 na constraint única de clientMessageId
-        if (err?.code === 'P2002') {
-          const raceExisting = await tx.chatMessage.findUnique({
-            where: {
-              conversationId_clientMessageId: {
-                conversationId: conversation.id,
-                clientMessageId: payload.clientMessageId,
-              },
+      // Caso 1: Mensagem sem anexos — fluxo direto homologado (status PUBLISHED)
+      if (!hasAttachments) {
+        try {
+          const created = await tx.chatMessage.create({
+            data: {
+              id: messageId,
+              conversationId: conversation.id,
+              cycleId: task.currentCycleId,
+              authorId: actor.userId,
+              sequenceNumber: nextSequence,
+              clientMessageId: payload.clientMessageId,
+              content: payload.content ? payload.content.trim() : null,
+              status: 'PUBLISHED',
+              createdAt: currentTime,
+              publishedAt: currentTime,
             },
             include: {
               author: { include: { role: true } },
@@ -218,20 +414,78 @@ export const createChatMessageService = ({ prisma }) => {
             },
           });
 
-          if (raceExisting) {
-            const contentMatches = (raceExisting.content ?? '') === (payload.content ?? '');
-            const authorMatches = raceExisting.authorId === actor.userId;
+          return { published: presentMessage(created, { taskId }) };
+        } catch (err) {
+          if (err?.code === 'P2002') {
+            const raceExisting = await tx.chatMessage.findUnique({
+              where: {
+                conversationId_clientMessageId: {
+                  conversationId: conversation.id,
+                  clientMessageId: payload.clientMessageId,
+                },
+              },
+              include: {
+                author: { include: { role: true } },
+                attachments: true,
+                conversation: { select: { taskId: true } },
+              },
+            });
 
-            if (contentMatches && authorMatches) {
-              return presentMessage(raceExisting, { taskId });
+            if (raceExisting && isMessageIdempotentMatch(raceExisting, payload, stagedAttachmentIds, actor.userId)) {
+              return { published: presentMessage(raceExisting, { taskId }) };
             }
-
             throw new AppError(409, 'IDEMPOTENCY_CONFLICT', 'O clientMessageId já foi utilizado com conteúdo diferente.');
           }
+          throw err;
         }
-        throw err;
       }
+
+      // Caso 2: Mensagem com anexos — cria em PENDING e reivindica uploads como CLAIMED
+      const createdPending = await tx.chatMessage.create({
+        data: {
+          id: messageId,
+          conversationId: conversation.id,
+          cycleId: task.currentCycleId,
+          authorId: actor.userId,
+          sequenceNumber: nextSequence,
+          clientMessageId: payload.clientMessageId,
+          content: payload.content ? payload.content.trim() : null,
+          status: 'PENDING',
+          createdAt: currentTime,
+          publishedAt: null,
+        },
+        include: {
+          author: { include: { role: true } },
+          attachments: true,
+          conversation: { select: { taskId: true } },
+        },
+      });
+
+      for (const upload of validatedUploads) {
+        const targetStorageKey = upload.targetStorageKey
+          || (storage ? storage.createObjectKey() : `objects/${upload.id.slice(0, 2)}/${upload.id}.object`);
+        upload.targetStorageKey = targetStorageKey;
+
+        await tx.chatAttachmentUpload.update({
+          where: { id: upload.id },
+          data: {
+            status: 'CLAIMED',
+            messageId: createdPending.id,
+            claimedAt: currentTime,
+            targetStorageKey,
+          },
+        });
+      }
+
+      return { pending: createdPending, orderedUploads: validatedUploads };
     });
+
+    if (reservation.published) {
+      return reservation.published;
+    }
+
+    // Publicação e promoção de anexos fora da transação de lock
+    return publishAttachmentsForMessage(reservation.pending, reservation.orderedUploads, taskId);
   };
 
   const listMessages = async (actor, taskId, query = {}) => {
