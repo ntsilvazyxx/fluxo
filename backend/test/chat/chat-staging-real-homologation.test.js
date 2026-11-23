@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -1004,6 +1004,292 @@ realHomologation('FASE 5.1.2.1 / 5.1.3 — Homologação Integrada Real do Stagi
       const unchangedUpload = await prisma.chatAttachmentUpload.findUnique({ where: { id: uploadId } });
       assert.equal(unchangedUpload.status, 'CLAIMED');
       assert.equal(await storage.exists(staged.key), true);
+    });
+  });
+
+  describe('SUITE 8: FASE 5.1.6 — HOMOLOGAÇÃO INTEGRADA PONTA A PONTA NO MARIADB', () => {
+    let suite8TaskId;
+    let suite8CycleId;
+    let suite8ConversationId;
+
+    before(async () => {
+      suite8TaskId = randomUUID();
+      suite8CycleId = randomUUID();
+
+      await prisma.task.create({
+        data: {
+          id: suite8TaskId,
+          teamId,
+          createdById: userMgr.id,
+          version: 1,
+        },
+      });
+
+      await prisma.taskCycle.create({
+        data: {
+          id: suite8CycleId,
+          taskId: suite8TaskId,
+          cycleNumber: 1,
+          title: 'Ciclo Tarefa Suite 8 Integracao Real',
+          description: 'Teste integrado ponta a ponta Fase 5.1.6 no MariaDB',
+          status: 'IN_PROGRESS',
+          openedAt: new Date(),
+          version: 1,
+        },
+      });
+
+      await prisma.task.update({
+        where: { id: suite8TaskId },
+        data: { currentCycleId: suite8CycleId },
+      });
+
+      const conv = await chatService.ensureConversationForTask(
+        prisma,
+        suite8TaskId,
+        suite8CycleId,
+        userMgr.id,
+        userTech1.id,
+      );
+      suite8ConversationId = conv.id;
+    });
+
+    it('8.1: Ciclo completo E2E no MariaDB: upload -> publish 2 anexos -> streaming -> hash -> auditoria', async () => {
+      const pdfBytes = Buffer.from('%PDF-1.4\n1 0 obj\n<< /Title (Relatorio Integrado) >>\nendobj\ntrailer\n<<>>\n%%EOF');
+      const txtBytes = Buffer.from('conteudo de teste de integracao ponta a ponta no mariadb');
+
+      const filePdf = await createFixtureFile('relatorio.pdf', pdfBytes);
+      const fileTxt = await createFixtureFile('notas.txt', txtBytes);
+
+      const stagedPdf = await attachmentService.stage(actorTech1, suite8TaskId, randomUUID(), filePdf);
+      const stagedTxt = await attachmentService.stage(actorTech1, suite8TaskId, randomUUID(), fileTxt);
+
+      assert.equal(stagedPdf.status, 'READY');
+      assert.equal(stagedTxt.status, 'READY');
+
+      const clientMessageId = randomUUID();
+      const message = await messageService.sendMessage(actorTech1, suite8TaskId, {
+        clientMessageId,
+        content: 'Mensagem integrada com 2 anexos no MariaDB',
+        stagedAttachmentIds: [stagedPdf.id, stagedTxt.id],
+      });
+
+      assert.equal(message.status, 'PUBLISHED');
+      assert.equal(message.attachments.length, 2);
+
+      const dbAttachments = await prisma.chatMessageAttachment.findMany({
+        where: { messageId: message.id },
+        orderBy: { position: 'asc' },
+      });
+      assert.equal(dbAttachments.length, 2);
+      assert.equal(dbAttachments[0].position, 0);
+      assert.equal(dbAttachments[1].position, 1);
+      const expectedPdfHash = createHash('sha256').update(pdfBytes).digest('hex');
+      const expectedTxtHash = createHash('sha256').update(txtBytes).digest('hex');
+      assert.equal(dbAttachments[0].sha256, expectedPdfHash);
+      assert.equal(dbAttachments[1].sha256, expectedTxtHash);
+
+      for (const att of dbAttachments) {
+        const downloadInfo = await messageService.getAttachmentForDownload(
+          actorTech1,
+          suite8TaskId,
+          message.id,
+          att.id,
+        );
+        assert.ok(downloadInfo.stream);
+        const chunks = [];
+        for await (const chunk of downloadInfo.stream) {
+          chunks.push(chunk);
+        }
+        const downloadedBytes = Buffer.concat(chunks);
+        const expectedBytes = att.originalName === 'relatorio.pdf' ? pdfBytes : txtBytes;
+        assert.deepEqual(downloadedBytes, expectedBytes);
+      }
+
+      const audit = await prisma.auditEvent.findFirst({
+        where: {
+          entityType: 'ChatMessageAttachment',
+          entityId: dbAttachments[0].id,
+          action: 'CHAT_ATTACHMENT_DOWNLOADED',
+        },
+      });
+      assert.ok(audit, 'Evento de auditoria de download deve ser persistido no MariaDB');
+      assert.equal(audit.afterJson.outcome, 'SUCCESS');
+    });
+
+    it('8.2: Disputa de concorrência e isolamento ao reivindicar anexo no MariaDB', async () => {
+      const file = await createFixtureFile('disputa.txt', 'arquivo de disputa concorrente');
+      const staged = await attachmentService.stage(actorTech1, suite8TaskId, randomUUID(), file);
+
+      const p1 = messageService.sendMessage(actorTech1, suite8TaskId, {
+        clientMessageId: randomUUID(),
+        content: 'Primeira concorrente',
+        stagedAttachmentIds: [staged.id],
+      });
+      const p2 = messageService.sendMessage(actorTech1, suite8TaskId, {
+        clientMessageId: randomUUID(),
+        content: 'Segunda concorrente',
+        stagedAttachmentIds: [staged.id],
+      });
+
+      const results = await Promise.allSettled([p1, p2]);
+      const fulfilled = results.filter((r) => r.status === 'fulfilled');
+      const rejected = results.filter((r) => r.status === 'rejected');
+
+      assert.equal(fulfilled.length, 1, 'Exatamente uma mensagem deve vencer a disputa');
+      assert.equal(rejected.length, 1, 'A outra mensagem deve falhar');
+      assert.equal(rejected[0].reason.status, 409);
+      assert.equal(rejected[0].reason.code, 'CHAT_ATTACHMENT_ALREADY_CLAIMED');
+    });
+
+    it('8.3: Preservação de privacidade histórica após saída e reingresso do participante', async () => {
+      // 1. Adiciona tech2
+      await participantService.addParticipant(actorMgr, suite8TaskId, userTech2.id);
+
+      // 2. Remove tech2
+      const partTech2 = await prisma.chatParticipant.findUnique({
+        where: {
+          conversationId_userId: {
+            conversationId: suite8ConversationId,
+            userId: userTech2.id,
+          },
+        },
+      });
+      assert.ok(partTech2);
+      await participantService.removeParticipant(actorMgr, suite8TaskId, partTech2.id, 'REMOVED_BY_MANAGER');
+
+      // 3. Aguarda 50ms para garantir separação temporal estrita
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // 4. tech1 publica mensagem com anexo durante o gap
+      const gapFile = await createFixtureFile('gap.txt', 'arquivo publicado durante gap');
+      const stagedGap = await attachmentService.stage(actorTech1, suite8TaskId, randomUUID(), gapFile);
+      const gapMessage = await messageService.sendMessage(actorTech1, suite8TaskId, {
+        clientMessageId: randomUUID(),
+        content: 'Mensagem privada durante gap de tech2',
+        stagedAttachmentIds: [stagedGap.id],
+      });
+
+      // 5. Aguarda mais 50ms
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // 6. tech2 é readmitido na conversa
+      await participantService.addParticipant(actorMgr, suite8TaskId, userTech2.id);
+
+      // 7. tech2 tenta baixar anexo da mensagem enviada no gap -> 404 CHAT_ATTACHMENT_NOT_FOUND
+      await assert.rejects(
+        () => messageService.getAttachmentForDownload(
+          actorTech2,
+          suite8TaskId,
+          gapMessage.id,
+          gapMessage.attachments[0].id,
+        ),
+        (err) => err.status === 404 && err.code === 'CHAT_ATTACHMENT_NOT_FOUND',
+      );
+    });
+
+    it('8.4: Precedência de bloqueio no MariaDB: bloqueia staging (423) mas permite download (200)', async () => {
+      const preLockFile = await createFixtureFile('pre_lock.txt', 'conteudo antes do bloqueio');
+      const stagedPre = await attachmentService.stage(actorTech1, suite8TaskId, randomUUID(), preLockFile);
+      const preMessage = await messageService.sendMessage(actorTech1, suite8TaskId, {
+        clientMessageId: randomUUID(),
+        content: 'Mensagem pre-bloqueio',
+        stagedAttachmentIds: [stagedPre.id],
+      });
+
+      // Bloqueia conversa
+      await lockService.adminLock(actorAdmin, suite8TaskId, {
+        isLocked: true,
+        reason: 'ADMIN_MAINTENANCE',
+      });
+
+      // Tenta upload durante bloqueio -> 423
+      const blockedFile = await createFixtureFile('bloqueado_84.txt', 'bloqueado');
+      await assert.rejects(
+        () => attachmentService.stage(actorTech1, suite8TaskId, randomUUID(), blockedFile),
+        (err) => err.status === 423 && err.code === 'CHAT_LOCKED',
+      );
+
+      // Download de anexo anterior -> permitido 200
+      const dl = await messageService.getAttachmentForDownload(
+        actorTech1,
+        suite8TaskId,
+        preMessage.id,
+        preMessage.attachments[0].id,
+      );
+      assert.ok(dl.stream);
+      assert.equal(dl.attachmentId, preMessage.attachments[0].id);
+
+      // Desbloqueia
+      await lockService.adminLock(actorAdmin, suite8TaskId, {
+        isLocked: false,
+      });
+    });
+
+    it('8.5: Recuperação de mensagem PENDING com promoção física e reconciliação no MariaDB', async () => {
+      const reconciler = createChatAttachmentReconciliationService({ prisma, storage });
+      const recContent = Buffer.from('conteudo para reconciliacao suite 8');
+      const staged = await storage.writeStaging(Readable.from([recContent]));
+
+      const recUploadId = randomUUID();
+      const recMessageId = randomUUID();
+      const currentTime = new Date();
+
+      await prisma.chatMessage.create({
+        data: {
+          id: recMessageId,
+          conversationId: suite8ConversationId,
+          cycleId: suite8CycleId,
+          authorId: userTech1.id,
+          sequenceNumber: 9910,
+          clientMessageId: randomUUID(),
+          content: 'Mensagem pendente aguardando reconciliacao Suite 8',
+          status: 'PENDING',
+          createdAt: currentTime,
+        },
+      });
+
+      await prisma.chatAttachmentUpload.create({
+        data: {
+          id: recUploadId,
+          conversationId: suite8ConversationId,
+          uploadedById: userTech1.id,
+          clientUploadId: randomUUID(),
+          messageId: recMessageId,
+          originalName: 'rec_suite8.txt',
+          stagingKey: staged.key,
+          mimeType: 'text/plain',
+          extension: 'txt',
+          sizeBytes: staged.sizeBytes,
+          sha256: staged.sha256,
+          status: 'CLAIMED',
+          expiresAt: new Date(Date.now() + 86400000),
+          claimedAt: currentTime,
+          updatedAt: currentTime,
+        },
+      });
+
+      const results = await reconciler.reconcilePendingMessages({ workerToken: 'worker-suite-8' });
+      const match = results.find((r) => r.messageId === recMessageId);
+      assert.ok(match);
+      assert.equal(match.status, 'RECONCILED');
+
+      const recDbMsg = await prisma.chatMessage.findUnique({ where: { id: recMessageId } });
+      assert.equal(recDbMsg.status, 'PUBLISHED');
+
+      const recDbUpload = await prisma.chatAttachmentUpload.findUnique({ where: { id: recUploadId } });
+      assert.equal(recDbUpload.status, 'PROMOTED');
+
+      const recDbAtt = await prisma.chatMessageAttachment.findFirst({ where: { messageId: recMessageId } });
+      assert.ok(recDbAtt);
+      assert.equal(recDbAtt.sha256, staged.sha256);
+
+      const dlInfo = await messageService.getAttachmentForDownload(
+        actorTech1,
+        suite8TaskId,
+        recMessageId,
+        recDbAtt.id,
+      );
+      assert.ok(dlInfo.stream);
     });
   });
 });
