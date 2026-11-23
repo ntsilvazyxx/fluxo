@@ -4,6 +4,7 @@ import { AppError } from '../../shared/errors/app-error.js';
 import { executeIdempotent } from '../../shared/http/idempotency.js';
 import { requireExpectedVersion } from '../tasks/task.policy.js';
 import { createDeadlineService } from '../deadline/deadline.service.js';
+import { createChatLockService } from '../chat/chat-lock.service.js';
 
 const missing = () => new AppError(404, 'REQUEST_NOT_FOUND', 'Solicitação não encontrada.');
 const conflict = (code, message) => new AppError(409, code, message);
@@ -40,7 +41,7 @@ async function lockTask(client, taskId) {
 
 const view = (r) => ({ id: r.id, cycleId: r.cycleId, assignmentId: r.assignmentId, type: r.type, status: r.status, reason: r.reason, proposedDeadlineAt: r.proposedDeadlineAt, decidedById: r.decidedById, decidedAt: r.decidedAt, decisionReason: r.decisionReason, createdAt: r.createdAt, updatedAt: r.updatedAt, pauses: r.pauseIntervals ?? [] });
 
-export const createRequestService = ({ prisma }) => {
+export const createRequestService = ({ prisma, chatLockService = createChatLockService({ prisma }) }) => {
   const deadlineService = createDeadlineService({ prisma });
 
   async function list(actor, taskId) {
@@ -72,6 +73,9 @@ export const createRequestService = ({ prisma }) => {
       const now = new Date();
       if (input.type === 'RETURN') {
         await tx.taskPauseInterval.create({ data: { id: randomUUID(), assignmentId: assignment.id, requestId: created.id, startedAt: now } });
+      }
+      if (chatLockService) {
+        await chatLockService.applyRequestLock(tx, task.id, cycle.id, created.id, request.auth.userId);
       }
       await tx.taskCycle.update({ where: { id: cycle.id }, data: { version: { increment: 1 } } });
       await audit(tx, request, { entityType: 'TaskRequest', entityId: created.id, action: input.type === 'RETURN' ? 'RETURN_REQUESTED' : 'EXTENSION_REQUESTED', afterJson: { taskId, type: input.type, proposedDeadlineAt: input.proposedDeadlineAt ?? null }, reason: input.reason });
@@ -122,6 +126,9 @@ export const createRequestService = ({ prisma }) => {
         }
       }
       await tx.taskRequest.update({ where: { id: requestId }, data: { status, decidedAt: now, decidedById: request.auth.userId, decisionReason: input.reason ?? null } });
+      if (chatLockService) {
+        await chatLockService.releaseRequestLock(tx, task.id, cycle.id, requestId, request.auth.userId, status);
+      }
       await audit(tx, request, {
         entityType: 'TaskRequest',
         entityId: current.id,

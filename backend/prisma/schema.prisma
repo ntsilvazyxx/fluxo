@@ -115,40 +115,47 @@ model Role {
 }
 
 model User {
-  id                      String                   @id @db.Char(36)
-  name                    String                   @db.VarChar(160)
-  emailNormalized         String                   @unique @db.VarChar(254)
-  passwordHash            String                   @db.VarChar(255)
-  roleId                  String                   @db.Char(36)
-  isActive                Boolean                  @default(true)
-  version                 Int                      @default(0) @db.UnsignedInt
-  createdAt               DateTime                 @default(now()) @db.DateTime(3)
-  updatedAt               DateTime                 @updatedAt @db.DateTime(3)
-  deletedAt               DateTime?                @db.DateTime(3)
-  role                    Role                     @relation(fields: [roleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  memberships             TeamMember[]
-  managedTeams            TeamManager[]
-  createdTasks            Task[]                   @relation("TaskCreator")
-  assignments             TaskAssignment[]         @relation("AssignmentResponsible")
-  assignmentsCreated      TaskAssignment[]         @relation("AssignmentAuthor")
-  requestsDecided         TaskRequest[]            @relation("RequestDecider")
-  deadlineChanges         DeadlineChange[]         @relation("DeadlineChangeAuthor")
-  imagesUploaded          TaskImage[]              @relation("TaskImageUploader")
-  attachmentsUploaded     TaskAttachment[]         @relation("TaskAttachmentUploader")
-  stagedUploads          StagedUpload[]
-  cycleNotes              TaskCycleNote[]          @relation("TaskCycleNoteAuthor")
-  calendarVersionsCreated CalendarVersion[]        @relation("CalendarVersionAuthor")
-  auditEvents             AuditEvent[]             @relation("AuditActor")
-  notifications           Notification[]
-  idempotencyKeys         IdempotencyKey[]
-  sessions                UserSession[]
-  legacyAuthChallenges    LegacyAuthChallenge[] @ignore
-  passwordResetTokens     PasswordResetToken[]
-  legacyMfaCredentials    LegacyMfaCredential[] @ignore
-  notificationPreferences NotificationPreference[]
-  taskPreferences         UserTaskPreference[]
-  taskComments            TaskComment[]            @relation("TaskCommentAuthor")
-  settingsUpdated         SystemSetting[]          @relation("SystemSettingUpdater")
+  id                       String                    @id @db.Char(36)
+  name                     String                    @db.VarChar(160)
+  emailNormalized          String                    @unique @db.VarChar(254)
+  passwordHash             String                    @db.VarChar(255)
+  roleId                   String                    @db.Char(36)
+  isActive                 Boolean                   @default(true)
+  version                  Int                       @default(0) @db.UnsignedInt
+  createdAt                DateTime                  @default(now()) @db.DateTime(3)
+  updatedAt                DateTime                  @updatedAt @db.DateTime(3)
+  deletedAt                DateTime?                 @db.DateTime(3)
+  role                     Role                      @relation(fields: [roleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  memberships              TeamMember[]
+  managedTeams             TeamManager[]
+  createdTasks             Task[]                    @relation("TaskCreator")
+  assignments              TaskAssignment[]          @relation("AssignmentResponsible")
+  assignmentsCreated       TaskAssignment[]          @relation("AssignmentAuthor")
+  requestsDecided          TaskRequest[]             @relation("RequestDecider")
+  deadlineChanges          DeadlineChange[]          @relation("DeadlineChangeAuthor")
+  imagesUploaded           TaskImage[]               @relation("TaskImageUploader")
+  attachmentsUploaded      TaskAttachment[]          @relation("TaskAttachmentUploader")
+  stagedUploads            StagedUpload[]
+  cycleNotes               TaskCycleNote[]           @relation("TaskCycleNoteAuthor")
+  calendarVersionsCreated  CalendarVersion[]         @relation("CalendarVersionAuthor")
+  auditEvents              AuditEvent[]              @relation("AuditActor")
+  notifications            Notification[]
+  idempotencyKeys          IdempotencyKey[]
+  sessions                 UserSession[]
+  legacyAuthChallenges     LegacyAuthChallenge[]     @ignore
+  passwordResetTokens      PasswordResetToken[]
+  legacyMfaCredentials     LegacyMfaCredential[]     @ignore
+  notificationPreferences  NotificationPreference[]
+  taskPreferences          UserTaskPreference[]
+  taskComments             TaskComment[]             @relation("TaskCommentAuthor")
+  settingsUpdated          SystemSetting[]           @relation("SystemSettingUpdater")
+  chatParticipants         ChatParticipant[]         @relation("UserChatParticipants")
+  chatPeriodsAdded         ChatParticipationPeriod[] @relation("PeriodAddedBy")
+  chatPeriodsRemoved       ChatParticipationPeriod[] @relation("PeriodRemovedBy")
+  authoredChatMessages     ChatMessage[]             @relation("UserAuthoredChatMessages")
+  chatFunctionalReadStates ChatFunctionalReadState[] @relation("UserChatFunctionalReadStates")
+  chatLocks                ChatLockState[]           @relation("UserChatLocks")
+  chatLockEvents           ChatLockEvent[]           @relation("UserChatLockEvents")
 
   @@index([roleId, isActive])
   @@index([name])
@@ -276,18 +283,19 @@ model Task {
   sigadocProcessNumber String?              @db.VarChar(128)
   sigadocProcessLink   String?              @db.VarChar(2048)
   parentCycleId        String?              @db.Char(36)
-  currentCycleId String?     @unique @db.Char(36)
-  version        Int         @default(0) @db.UnsignedInt
-  createdAt      DateTime    @default(now()) @db.DateTime(3)
-  updatedAt      DateTime    @updatedAt @db.DateTime(3)
-  deletedAt      DateTime?   @db.DateTime(3)
-  team           Team        @relation(fields: [teamId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  createdBy      User        @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  parentCycle    TaskCycle?  @relation("CycleSubtasks", fields: [parentCycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  currentCycle   TaskCycle?  @relation("TaskCurrentCycle", fields: [currentCycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  cycles         TaskCycle[] @relation("TaskCycles")
-  userPreferences UserTaskPreference[]
-  comments       TaskComment[]       @relation("TaskComments")
+  currentCycleId       String?              @unique @db.Char(36)
+  version              Int                  @default(0) @db.UnsignedInt
+  createdAt            DateTime             @default(now()) @db.DateTime(3)
+  updatedAt            DateTime             @updatedAt @db.DateTime(3)
+  deletedAt            DateTime?            @db.DateTime(3)
+  team                 Team                 @relation(fields: [teamId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy            User                 @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  parentCycle          TaskCycle?           @relation("CycleSubtasks", fields: [parentCycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  currentCycle         TaskCycle?           @relation("TaskCurrentCycle", fields: [currentCycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  cycles               TaskCycle[]          @relation("TaskCycles")
+  userPreferences      UserTaskPreference[]
+  comments             TaskComment[]        @relation("TaskComments")
+  chatConversation     ChatConversation?
 
   @@index([teamId, deletedAt])
   @@index([createdById])
@@ -296,34 +304,37 @@ model Task {
 }
 
 model TaskCycle {
-  id              String           @id @db.Char(36)
-  taskId          String           @db.Char(36)
-  cycleNumber     Int              @db.UnsignedInt
-  title           String           @db.VarChar(255)
-  description     String           @db.Text
-  priority        TaskPriority     @default(NORMAL)
-  status          TaskCycleStatus  @default(PENDING)
-  deadlinePolicy  DeadlinePolicy   @default(LEGACY_CALENDAR)
-  acceptanceDurationMinutes Int?   @db.UnsignedInt
-  executionDurationMinutes  Int?   @db.UnsignedInt
-  acceptanceDeadlineAt       DateTime? @db.DateTime(3)
-  executionDeadlineAt        DateTime? @db.DateTime(3)
-  deadlineAt      DateTime?        @db.DateTime(3)
-  version         Int              @default(0) @db.UnsignedInt
-  openedAt        DateTime         @db.DateTime(3)
-  closedAt        DateTime?        @db.DateTime(3)
-  completionText  String?          @db.Text
-  createdAt       DateTime         @default(now()) @db.DateTime(3)
-  updatedAt       DateTime         @updatedAt @db.DateTime(3)
-  task            Task             @relation("TaskCycles", fields: [taskId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  currentForTask  Task?            @relation("TaskCurrentCycle")
-  subtasks        Task[]           @relation("CycleSubtasks")
-  assignments     TaskAssignment[]
-  requests        TaskRequest[]
-  deadlineChanges DeadlineChange[]
-  images          TaskImage[]
-  attachments     TaskAttachment[]
-  notes           TaskCycleNote[]
+  id                        String           @id @db.Char(36)
+  taskId                    String           @db.Char(36)
+  cycleNumber               Int              @db.UnsignedInt
+  title                     String           @db.VarChar(255)
+  description               String           @db.Text
+  priority                  TaskPriority     @default(NORMAL)
+  status                    TaskCycleStatus  @default(PENDING)
+  deadlinePolicy            DeadlinePolicy   @default(LEGACY_CALENDAR)
+  acceptanceDurationMinutes Int?             @db.UnsignedInt
+  executionDurationMinutes  Int?             @db.UnsignedInt
+  acceptanceDeadlineAt      DateTime?        @db.DateTime(3)
+  executionDeadlineAt       DateTime?        @db.DateTime(3)
+  deadlineAt                DateTime?        @db.DateTime(3)
+  version                   Int              @default(0) @db.UnsignedInt
+  openedAt                  DateTime         @db.DateTime(3)
+  closedAt                  DateTime?        @db.DateTime(3)
+  completionText            String?          @db.Text
+  createdAt                 DateTime         @default(now()) @db.DateTime(3)
+  updatedAt                 DateTime         @updatedAt @db.DateTime(3)
+  task                      Task             @relation("TaskCycles", fields: [taskId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  currentForTask            Task?            @relation("TaskCurrentCycle")
+  subtasks                  Task[]           @relation("CycleSubtasks")
+  assignments               TaskAssignment[]
+  requests                  TaskRequest[]
+  deadlineChanges           DeadlineChange[]
+  images                    TaskImage[]
+  attachments               TaskAttachment[]
+  notes                     TaskCycleNote[]
+  chatMessages              ChatMessage[]
+  chatLockStates            ChatLockState[]
+  chatLockEvents            ChatLockEvent[]
 
   @@unique([taskId, cycleNumber])
   @@unique([id, taskId])
@@ -335,23 +346,23 @@ model TaskCycle {
 }
 
 model TaskAssignment {
-  id                String               @id @db.Char(36)
-  cycleId           String               @db.Char(36)
-  userId            String               @db.Char(36)
-  assignedById      String               @db.Char(36)
-  calendarVersionId String?              @db.Char(36)
-  acceptanceDeadlineAt DateTime?         @db.DateTime(3)
-  assignedAt        DateTime             @db.DateTime(3)
-  acceptedAt        DateTime?            @db.DateTime(3)
-  endedAt           DateTime?            @db.DateTime(3)
-  endReason         AssignmentEndReason?
-  createdAt         DateTime             @default(now()) @db.DateTime(3)
-  cycle             TaskCycle            @relation(fields: [cycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  user              User                 @relation("AssignmentResponsible", fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  assignedBy        User                 @relation("AssignmentAuthor", fields: [assignedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  calendarVersion   CalendarVersion?     @relation(fields: [calendarVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  requests          TaskRequest[]
-  pauseIntervals    TaskPauseInterval[]
+  id                   String               @id @db.Char(36)
+  cycleId              String               @db.Char(36)
+  userId               String               @db.Char(36)
+  assignedById         String               @db.Char(36)
+  calendarVersionId    String?              @db.Char(36)
+  acceptanceDeadlineAt DateTime?            @db.DateTime(3)
+  assignedAt           DateTime             @db.DateTime(3)
+  acceptedAt           DateTime?            @db.DateTime(3)
+  endedAt              DateTime?            @db.DateTime(3)
+  endReason            AssignmentEndReason?
+  createdAt            DateTime             @default(now()) @db.DateTime(3)
+  cycle                TaskCycle            @relation(fields: [cycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user                 User                 @relation("AssignmentResponsible", fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  assignedBy           User                 @relation("AssignmentAuthor", fields: [assignedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  calendarVersion      CalendarVersion?     @relation(fields: [calendarVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  requests             TaskRequest[]
+  pauseIntervals       TaskPauseInterval[]
 
   @@unique([id, cycleId])
   @@index([cycleId, endedAt])
@@ -377,6 +388,7 @@ model TaskRequest {
   assignment         TaskAssignment      @relation(fields: [assignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   decidedBy          User?               @relation("RequestDecider", fields: [decidedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   pauseIntervals     TaskPauseInterval[]
+  chatLockEvents     ChatLockEvent[]
 
   @@index([assignmentId, type, status])
   @@index([cycleId, status])
@@ -400,16 +412,16 @@ model TaskPauseInterval {
 }
 
 model DeadlineChange {
-  id            String    @id @db.Char(36)
-  cycleId       String    @db.Char(36)
-  oldDeadlineAt DateTime? @db.DateTime(3)
-  newDeadlineAt DateTime  @db.DateTime(3)
+  id            String             @id @db.Char(36)
+  cycleId       String             @db.Char(36)
+  oldDeadlineAt DateTime?          @db.DateTime(3)
+  newDeadlineAt DateTime           @db.DateTime(3)
   kind          DeadlineChangeKind @default(LEGACY)
-  reason        String    @db.Text
-  changedById   String    @db.Char(36)
-  createdAt     DateTime  @default(now()) @db.DateTime(3)
-  cycle         TaskCycle @relation(fields: [cycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  changedBy     User      @relation("DeadlineChangeAuthor", fields: [changedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reason        String             @db.Text
+  changedById   String             @db.Char(36)
+  createdAt     DateTime           @default(now()) @db.DateTime(3)
+  cycle         TaskCycle          @relation(fields: [cycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  changedBy     User               @relation("DeadlineChangeAuthor", fields: [changedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@index([cycleId, createdAt])
   @@index([cycleId, kind, createdAt])
@@ -580,14 +592,14 @@ model IdempotencyKey {
 }
 
 model UserSession {
-  id               String    @id @db.Char(36)
-  userId           String    @db.Char(36)
-  refreshTokenHash String    @unique @db.Char(64)
-  createdAt        DateTime  @default(now()) @db.DateTime(3)
-  expiresAt        DateTime  @db.DateTime(3)
-  revokedAt        DateTime? @db.DateTime(3)
-  legacyMfaVerifiedAt DateTime? @db.DateTime(3) @ignore
-  user             User      @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  id                  String    @id @db.Char(36)
+  userId              String    @db.Char(36)
+  refreshTokenHash    String    @unique @db.Char(64)
+  createdAt           DateTime  @default(now()) @db.DateTime(3)
+  expiresAt           DateTime  @db.DateTime(3)
+  revokedAt           DateTime? @db.DateTime(3)
+  legacyMfaVerifiedAt DateTime? @ignore @db.DateTime(3)
+  user                User      @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@index([userId, revokedAt, expiresAt])
   @@map("user_sessions")
@@ -595,15 +607,16 @@ model UserSession {
 
 // Archived only: no generated client delegate or runtime authentication use.
 model LegacyAuthChallenge {
-  id String @id @db.Char(36)
-  userId String @db.Char(36)
-  tokenHash String @unique(map: "auth_challenges_tokenHash_key") @db.Char(64)
-  userVersion Int @db.UnsignedInt
-  enrollmentSecret String? @db.Text
-  attempts Int @default(0) @db.UnsignedInt
-  expiresAt DateTime @db.DateTime(3)
-  consumedAt DateTime? @db.DateTime(3)
-  user User @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "auth_challenges_userId_fkey")
+  id               String    @id @db.Char(36)
+  userId           String    @db.Char(36)
+  tokenHash        String    @unique(map: "auth_challenges_tokenHash_key") @db.Char(64)
+  userVersion      Int       @db.UnsignedInt
+  enrollmentSecret String?   @db.Text
+  attempts         Int       @default(0) @db.UnsignedInt
+  expiresAt        DateTime  @db.DateTime(3)
+  consumedAt       DateTime? @db.DateTime(3)
+  user             User      @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "auth_challenges_userId_fkey")
+
   @@index([userId, expiresAt], map: "auth_challenges_userId_expiresAt_idx")
   @@map("legacy_mfa_auth_challenges")
   @@ignore
@@ -699,3 +712,244 @@ model TaskComment {
   @@map("task_comments")
 }
 
+// ============================================================================
+// CHAT DE TAREFAS — ENUMS
+// ============================================================================
+
+enum ChatParticipationEndReason {
+  REASSIGNED
+  REMOVED_BY_MANAGER
+  ACCOUNT_DEACTIVATED
+  ASSIGNMENT_REJECTED
+  CYCLE_ENDED
+}
+
+enum ChatMessageStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+enum ChatMessageAttachmentOrigin {
+  UPLOAD
+  SYSTEM_GENERATED
+}
+
+enum ChatLockReason {
+  REQUEST_PENDING
+  CYCLE_CLOSED
+  ADMIN_MAINTENANCE
+}
+
+enum ChatLockEventType {
+  LOCK_ACQUIRED
+  LOCK_REASSERTED
+  LOCK_RELEASED
+  DECISION_RECORDED_WHILE_UNLOCKED
+  CYCLE_TERMINATED
+  CYCLE_REOPENED
+  ADMIN_INTERVENTION
+}
+
+// ============================================================================
+// CHAT DE TAREFAS — MODELOS DE PERSISTÊNCIA
+// ============================================================================
+
+/// Conversa única do Chat de Tarefas, vinculada 1:1 com a Tarefa raiz.
+model ChatConversation {
+  id        String   @id @default(uuid()) @db.Char(36)
+  taskId    String   @unique @db.Char(36)
+  createdAt DateTime @default(now()) @db.DateTime(3)
+  updatedAt DateTime @updatedAt @db.DateTime(3)
+
+  task                 Task                      @relation(fields: [taskId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  participants         ChatParticipant[]
+  messages             ChatMessage[]
+  readReceipts         ChatReadReceipt[]
+  functionalReadStates ChatFunctionalReadState[]
+  lockState            ChatLockState?
+  lockEvents           ChatLockEvent[]
+
+  @@map("chat_conversations")
+}
+
+/// Vínculo formal único entre usuário e conversa da tarefa.
+model ChatParticipant {
+  id             String   @id @default(uuid()) @db.Char(36)
+  conversationId String   @db.Char(36)
+  userId         String   @db.Char(36)
+  createdAt      DateTime @default(now()) @db.DateTime(3)
+  updatedAt      DateTime @updatedAt @db.DateTime(3)
+
+  conversation ChatConversation          @relation(fields: [conversationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user         User                      @relation("UserChatParticipants", fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  periods      ChatParticipationPeriod[]
+  readReceipt  ChatReadReceipt?
+
+  @@unique([conversationId, userId])
+  @@unique([id, conversationId])
+  @@index([userId])
+  @@map("chat_participants")
+}
+
+/// Histórico formal de períodos de permanência do participante na conversa.
+model ChatParticipationPeriod {
+  id            String                      @id @default(uuid()) @db.Char(36)
+  participantId String                      @db.Char(36)
+  joinedAt      DateTime                    @default(now()) @db.DateTime(3)
+  endedAt       DateTime?                   @db.DateTime(3)
+  endReason     ChatParticipationEndReason?
+  addedById     String                      @db.Char(36)
+  removedById   String?                     @db.Char(36)
+  createdAt     DateTime                    @default(now()) @db.DateTime(3)
+
+  participant ChatParticipant @relation(fields: [participantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  addedBy     User            @relation("PeriodAddedBy", fields: [addedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  removedBy   User?           @relation("PeriodRemovedBy", fields: [removedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([participantId, joinedAt])
+  @@index([endedAt])
+  @@index([addedById])
+  @@index([removedById])
+  @@map("chat_participation_periods")
+}
+
+/// Mensagem enviada na conversa, associada ao ciclo da tarefa.
+model ChatMessage {
+  id                           String            @id @default(uuid()) @db.Char(36)
+  conversationId               String            @db.Char(36)
+  cycleId                      String            @db.Char(36)
+  authorId                     String            @db.Char(36)
+  sequenceNumber               BigInt            @db.UnsignedBigInt
+  clientMessageId              String            @db.Char(36)
+  content                      String?           @db.Text
+  status                       ChatMessageStatus @default(PENDING)
+  reconciliationClaimToken     String?           @db.Char(36)
+  reconciliationClaimedAt      DateTime?         @db.DateTime(3)
+  reconciliationClaimExpiresAt DateTime?         @db.DateTime(3)
+  reconciliationAttempts       Int               @default(0) @db.TinyInt
+  failureReason                String?           @db.VarChar(255)
+  createdAt                    DateTime          @default(now()) @db.DateTime(3)
+  publishedAt                  DateTime?         @db.DateTime(3)
+
+  conversation        ChatConversation          @relation(fields: [conversationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  cycle               TaskCycle                 @relation(fields: [cycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  author              User                      @relation("UserAuthoredChatMessages", fields: [authorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  attachments         ChatMessageAttachment[]
+  receiptLastReads    ChatReadReceipt[]         @relation("ReceiptLastReadMessage")
+  functionalLastReads ChatFunctionalReadState[] @relation("FunctionalLastReadMessage")
+
+  @@unique([conversationId, sequenceNumber])
+  @@unique([conversationId, clientMessageId])
+  @@unique([id, conversationId])
+  @@index([cycleId])
+  @@index([authorId])
+  @@index([status, createdAt])
+  @@index([reconciliationClaimExpiresAt])
+  @@map("chat_messages")
+}
+
+/// Anexo físico exclusivo de mensagens do chat.
+model ChatMessageAttachment {
+  id           String                      @id @default(uuid()) @db.Char(36)
+  messageId    String                      @db.Char(36)
+  originalName String                      @db.VarChar(255)
+  storagePath  String                      @db.VarChar(500)
+  mimeType     String                      @db.VarChar(127)
+  sizeBytes    BigInt                      @db.UnsignedBigInt
+  sha256       String                      @db.Char(64)
+  origin       ChatMessageAttachmentOrigin @default(UPLOAD)
+  createdAt    DateTime                    @default(now()) @db.DateTime(3)
+
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([messageId])
+  @@map("chat_message_attachments")
+}
+
+/// Ponteiro de leitura para participantes formais da conversa.
+model ChatReadReceipt {
+  id                String    @id @default(uuid()) @db.Char(36)
+  conversationId    String    @db.Char(36)
+  participantId     String    @unique @db.Char(36)
+  lastReadMessageId String?   @db.Char(36)
+  lastReadSequence  BigInt    @default(0) @db.UnsignedBigInt
+  lastReadAt        DateTime? @db.DateTime(3)
+  createdAt         DateTime  @default(now()) @db.DateTime(3)
+  updatedAt         DateTime  @updatedAt @db.DateTime(3)
+
+  conversation    ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  participant     ChatParticipant  @relation(fields: [participantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  lastReadMessage ChatMessage?     @relation("ReceiptLastReadMessage", fields: [lastReadMessageId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([conversationId])
+  @@index([lastReadMessageId])
+  @@map("chat_read_receipts")
+}
+
+/// Ponteiro de leitura funcional para gestores e observadores autorizados.
+model ChatFunctionalReadState {
+  id                String    @id @default(uuid()) @db.Char(36)
+  conversationId    String    @db.Char(36)
+  userId            String    @db.Char(36)
+  lastReadMessageId String?   @db.Char(36)
+  lastReadSequence  BigInt    @default(0) @db.UnsignedBigInt
+  lastReadAt        DateTime? @db.DateTime(3)
+  createdAt         DateTime  @default(now()) @db.DateTime(3)
+  updatedAt         DateTime  @updatedAt @db.DateTime(3)
+
+  conversation    ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user            User             @relation("UserChatFunctionalReadStates", fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  lastReadMessage ChatMessage?     @relation("FunctionalLastReadMessage", fields: [lastReadMessageId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@index([lastReadMessageId])
+  @@map("chat_functional_read_states")
+}
+
+/// Estado operacional de bloqueio da conversa vinculado ao ciclo vigente da tarefa.
+model ChatLockState {
+  id             String          @id @default(uuid()) @db.Char(36)
+  conversationId String          @unique @db.Char(36)
+  cycleId        String          @db.Char(36)
+  isLocked       Boolean         @default(false)
+  reason         ChatLockReason?
+  requestId      String?         @db.Char(36)
+  lockedAt       DateTime?       @db.DateTime(3)
+  lockedById     String?         @db.Char(36)
+  createdAt      DateTime        @default(now()) @db.DateTime(3)
+  updatedAt      DateTime        @updatedAt @db.DateTime(3)
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  cycle        TaskCycle        @relation(fields: [cycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  lockedBy     User?            @relation("UserChatLocks", fields: [lockedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([cycleId])
+  @@index([lockedById])
+  @@map("chat_lock_states")
+}
+
+/// Histórico imutável de eventos de bloqueio e desbloqueio.
+model ChatLockEvent {
+  id             String            @id @default(uuid()) @db.Char(36)
+  conversationId String            @db.Char(36)
+  cycleId        String            @db.Char(36)
+  eventType      ChatLockEventType
+  actorId        String?           @db.Char(36)
+  reason         ChatLockReason?
+  requestId      String?           @db.Char(36)
+  metadata       Json?
+  createdAt      DateTime          @default(now()) @db.DateTime(3)
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  cycle        TaskCycle        @relation(fields: [cycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  actor        User?            @relation("UserChatLockEvents", fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  request      TaskRequest?     @relation(fields: [requestId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([conversationId, createdAt])
+  @@index([cycleId])
+  @@index([actorId])
+  @@index([requestId])
+  @@map("chat_lock_events")
+}

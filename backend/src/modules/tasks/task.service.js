@@ -7,6 +7,8 @@ import { presentTask } from './task.presenter.js';
 import { calculateAssignmentMetrics } from '../time-accounting/time-accounting.js';
 import { createDeadlineService } from '../deadline/deadline.service.js';
 import { presentComment } from '../comments/comment.service.js';
+import { createChatService } from '../chat/chat.service.js';
+import { createChatLockService } from '../chat/chat-lock.service.js';
 
 const missing = () => new AppError(404, 'TASK_NOT_FOUND', 'Tarefa não encontrada.');
 const conflict = (code, message) => new AppError(409, code, message);
@@ -125,7 +127,7 @@ async function closePendingRequests(tx, cycleId, status, actorId, now) {
   await tx.taskPauseInterval.updateMany({ where: { requestId: { in: pending.map((item)=>item.id) }, endedAt: null }, data: { endedAt: now } });
   await tx.taskRequest.updateMany({ where: { id: { in: pending.map((item)=>item.id) } }, data: { status, decidedAt: now, decidedById: actorId } });
 }
-async function restartCycle(prisma, request, id, input, key, action) {
+async function restartCycle(prisma, request, id, input, key, action, chatLockService) {
   return executeIdempotent(prisma, {
     actorId: request.auth.userId,
     key,
@@ -153,6 +155,9 @@ async function restartCycle(prisma, request, id, input, key, action) {
         where: { id: task.id },
         data: { currentCycleId: newCycle.id, version: { increment: 1 } },
       });
+      if (chatLockService) {
+        await chatLockService.releaseCycleClosedLock(tx, task.id, newCycle.id, request.auth.userId);
+      }
       const eventType = action === 'reopen' ? 'TASK_REOPENED' : 'TASK_RESTORED';
       await audit(tx, request, {
         entityType: 'Task',
@@ -175,7 +180,7 @@ async function restartCycle(prisma, request, id, input, key, action) {
   });
 }
 
-export const createTaskService = ({ prisma, attachmentService }) => ({
+export const createTaskService = ({ prisma, attachmentService, chatService = createChatService({ prisma }), chatLockService = createChatLockService({ prisma }) }) => ({
   async list(actor, filters, mode = 'all') {
     const now = new Date();
     const where = { deletedAt: null, AND: [scopeWhere(actor)] };
@@ -336,6 +341,7 @@ export const createTaskService = ({ prisma, attachmentService }) => ({
       const cycle = await tx.taskCycle.create({ data: { id: cycleId, taskId, cycleNumber: 1, title: input.title, description: input.description, priority: input.priority, status:'AWAITING_ACCEPTANCE', deadlinePolicy:'RUNNING_CLOCK', acceptanceDurationMinutes:input.acceptanceDurationMinutes, executionDurationMinutes:input.executionDurationMinutes, acceptanceDeadlineAt, openedAt: now } });
       await tx.task.update({ where: { id: taskId }, data: { currentCycleId: cycleId } });
       await tx.taskAssignment.create({data:{id:assignmentId,cycleId,userId:responsible.id,assignedById:request.auth.userId,assignedAt:now,acceptanceDeadlineAt}});
+      await chatService.ensureConversationForTask(tx, taskId, cycleId, request.auth.userId, responsible.id);
       await audit(tx, request, { entityType:'Task',entityId:taskId,action:'TASK_CREATED_AND_ASSIGNED',afterJson:{teamId:team.id,cycleId,assignmentId,userId:responsible.id,deadlinePolicy:'RUNNING_CLOCK',acceptanceDeadlineAt,acceptanceDurationMinutes:input.acceptanceDurationMinutes,executionDurationMinutes:input.executionDurationMinutes,adminTaskCreationException:request.auth.roleCode==='ADMIN_MASTER',sigadocProcessNumber: input.sigadocProcessNumber ? input.sigadocProcessNumber.trim() : null, sigadocProcessLink: input.sigadocProcessLink ? input.sigadocProcessLink.trim() : null},reason:input.reason });
       await outbox(tx, taskId, cycle, 'TASK_ASSIGNED',{userId:responsible.id,assignmentId});
       claims = await attachmentService.claimInitial(tx, request.auth.userId, cycleId, input.initialAttachmentIds);
@@ -407,6 +413,11 @@ export const createTaskService = ({ prisma, attachmentService }) => ({
       const created=await tx.taskAssignment.create({data:{id:randomUUID(),cycleId:cycle.id,userId:user.id,assignedById:request.auth.userId,calendarVersionId:calendar?.activeVersionId??null,assignedAt:now,acceptanceDeadlineAt}});
       const cycleData = { status:'AWAITING_ACCEPTANCE', acceptanceDurationMinutes: cycle.deadlinePolicy === 'RUNNING_CLOCK' ? input.acceptanceDurationMinutes : cycle.acceptanceDurationMinutes, executionDurationMinutes: cycle.deadlinePolicy === 'RUNNING_CLOCK' ? input.executionDurationMinutes : cycle.executionDurationMinutes, acceptanceDeadlineAt, executionDeadlineAt, version: { increment: 1 } };
       await tx.taskCycle.update({where:{id:cycle.id},data:cycleData});
+      if (assignment) {
+        await chatService.handleTaskReassignment(tx, id, cycle.id, request.auth.userId, user.id, assignment.userId);
+      } else {
+        await chatService.ensureConversationForTask(tx, id, cycle.id, request.auth.userId, user.id);
+      }
       await audit(tx,request,{entityType:'TaskAssignment',entityId:created.id,action:assignment?'TASK_REASSIGNED':'TASK_ASSIGNED',afterJson:{taskId:id,cycleId:cycle.id,userId:user.id,deadlinePolicy:cycle.deadlinePolicy,acceptanceDeadlineAt,acceptanceDurationMinutes:input.acceptanceDurationMinutes,executionDurationMinutes:input.executionDurationMinutes,previousAssignmentId: assignment?.id, previousEndedAt: assignment?.endedAt, previousEndReason: assignment?.endReason},reason:input.reason});await outbox(tx,id,cycle,assignment?'TASK_REASSIGNED':'TASK_ASSIGNED',{userId:user.id,assignmentId:created.id,previousAssignmentId: assignment?.id});
       return presentTask(await tx.task.findUnique({where:{id},include:includeCurrent}));
     }});
@@ -446,11 +457,11 @@ export const createTaskService = ({ prisma, attachmentService }) => ({
     }});
   },
 
-  async complete(request,id,input,key){return executeIdempotent(prisma,{actorId:request.auth.userId,key,payload:{id,...input},operation:async(tx)=>{const{cycle,assignment}=await lockCurrent(tx,id);requireExpectedVersion(cycle,input.expectedVersion);transitionTo(cycle.status,'complete');if(!assignment||assignment.userId!==request.auth.userId)throw conflict('ASSIGNMENT_NOT_CURRENT','Somente o responsável atual pode concluir a tarefa.');if(cycle.requests.some((item)=>item.type==='RETURN'))throw conflict('PENDING_REQUEST_EXISTS','Há devolução pendente para esta atribuição.');const now=new Date();await closePendingRequests(tx,cycle.id,'CLOSED_BY_COMPLETION',request.auth.userId,now);await tx.taskAssignment.update({where:{id:assignment.id},data:{endedAt:now,endReason:'COMPLETED'}});await tx.taskCycle.update({where:{id:cycle.id},data:{status:'COMPLETED',completionText:input.completionText,closedAt:now,version:{increment:1}}});await audit(tx,request,{entityType:'TaskCycle',entityId:cycle.id,action:'TASK_COMPLETED',afterJson:{completionText:input.completionText,closedAt:now}});await outbox(tx,id,cycle,'TASK_COMPLETED',{userId:request.auth.userId});return presentTask(await tx.task.findUnique({where:{id},include:includeCurrent}));}})},
+  async complete(request,id,input,key){return executeIdempotent(prisma,{actorId:request.auth.userId,key,payload:{id,...input},operation:async(tx)=>{const{cycle,assignment}=await lockCurrent(tx,id);requireExpectedVersion(cycle,input.expectedVersion);transitionTo(cycle.status,'complete');if(!assignment||assignment.userId!==request.auth.userId)throw conflict('ASSIGNMENT_NOT_CURRENT','Somente o responsável atual pode concluir a tarefa.');if(cycle.requests.some((item)=>item.type==='RETURN'))throw conflict('PENDING_REQUEST_EXISTS','Há devolução pendente para esta atribuição.');const now=new Date();await closePendingRequests(tx,cycle.id,'CLOSED_BY_COMPLETION',request.auth.userId,now);await tx.taskAssignment.update({where:{id:assignment.id},data:{endedAt:now,endReason:'COMPLETED'}});await tx.taskCycle.update({where:{id:cycle.id},data:{status:'COMPLETED',completionText:input.completionText,closedAt:now,version:{increment:1}}});if(chatLockService){await chatLockService.applyCycleClosedLock(tx,id,cycle.id,request.auth.userId);}await audit(tx,request,{entityType:'TaskCycle',entityId:cycle.id,action:'TASK_COMPLETED',afterJson:{completionText:input.completionText,closedAt:now}});await outbox(tx,id,cycle,'TASK_COMPLETED',{userId:request.auth.userId});return presentTask(await tx.task.findUnique({where:{id},include:includeCurrent}));}})},
 
-  async cancel(request,id,input,key){return executeIdempotent(prisma,{actorId:request.auth.userId,key,payload:{id,...input},operation:async(tx)=>{const{root,children}=await lockForCancellation(tx,id);await requireManagement(tx,request,root.task.teamId,input.reason);if (root.task.createdById !== request.auth.userId) { throw new AppError(403, 'FORBIDDEN', 'Somente o criador original pode cancelar a tarefa.'); }requireExpectedVersion(root.cycle,input.expectedVersion);transitionTo(root.cycle.status,'cancel');const now=new Date();for(const child of children){await closePendingRequests(tx,child.currentCycle.id,'CLOSED_BY_CANCELLATION',request.auth.userId,now);await tx.taskAssignment.updateMany({where:{cycleId:child.currentCycle.id,endedAt:null},data:{endedAt:now,endReason:'CANCELLED'}});await tx.taskCycle.update({where:{id:child.currentCycle.id},data:{status:'CANCELLED',closedAt:now,version:{increment:1}}});await audit(tx,request,{entityType:'TaskCycle',entityId:child.currentCycle.id,action:'SUBTASK_CANCELLED_WITH_PARENT',reason:input.reason});await tx.outboxEvent.create({data:{id:randomUUID(),eventType:'SUBTASK_CANCELLED_WITH_PARENT',payloadJson:{taskId:child.id,cycleId:child.currentCycle.id,parentTaskId:id},dedupeKey:`task:${child.id}:SUBTASK_CANCELLED_WITH_PARENT:${child.currentCycle.version+1}`}});}await closePendingRequests(tx,root.cycle.id,'CLOSED_BY_CANCELLATION',request.auth.userId,now);if(root.assignment)await tx.taskAssignment.update({where:{id:root.assignment.id},data:{endedAt:now,endReason:'CANCELLED'}});await tx.taskCycle.update({where:{id:root.cycle.id},data:{status:'CANCELLED',closedAt:now,version:{increment:1}}});await audit(tx,request,{entityType:'TaskCycle',entityId:root.cycle.id,action:'TASK_CANCELLED',afterJson:{closedAt:now,cancelledSubtasks:children.length},reason:input.reason});await outbox(tx,id,root.cycle,'TASK_CANCELLED');return presentTask(await tx.task.findUnique({where:{id},include:includeCurrent}));}})},
+  async cancel(request,id,input,key){return executeIdempotent(prisma,{actorId:request.auth.userId,key,payload:{id,...input},operation:async(tx)=>{const{root,children}=await lockForCancellation(tx,id);await requireManagement(tx,request,root.task.teamId,input.reason);if (root.task.createdById !== request.auth.userId) { throw new AppError(403, 'FORBIDDEN', 'Somente o criador original pode cancelar a tarefa.'); }requireExpectedVersion(root.cycle,input.expectedVersion);transitionTo(root.cycle.status,'cancel');const now=new Date();for(const child of children){await closePendingRequests(tx,child.currentCycle.id,'CLOSED_BY_CANCELLATION',request.auth.userId,now);await tx.taskAssignment.updateMany({where:{cycleId:child.currentCycle.id,endedAt:null},data:{endedAt:now,endReason:'CANCELLED'}});await tx.taskCycle.update({where:{id:child.currentCycle.id},data:{status:'CANCELLED',closedAt:now,version:{increment:1}}});if(chatLockService){await chatLockService.applyCycleClosedLock(tx,child.id,child.currentCycle.id,request.auth.userId);}await audit(tx,request,{entityType:'TaskCycle',entityId:child.currentCycle.id,action:'SUBTASK_CANCELLED_WITH_PARENT',reason:input.reason});await tx.outboxEvent.create({data:{id:randomUUID(),eventType:'SUBTASK_CANCELLED_WITH_PARENT',payloadJson:{taskId:child.id,cycleId:child.currentCycle.id,parentTaskId:id},dedupeKey:`task:${child.id}:SUBTASK_CANCELLED_WITH_PARENT:${child.currentCycle.version+1}`}});}await closePendingRequests(tx,root.cycle.id,'CLOSED_BY_CANCELLATION',request.auth.userId,now);if(root.assignment)await tx.taskAssignment.update({where:{id:root.assignment.id},data:{endedAt:now,endReason:'CANCELLED'}});await tx.taskCycle.update({where:{id:root.cycle.id},data:{status:'CANCELLED',closedAt:now,version:{increment:1}}});if(chatLockService){await chatLockService.applyCycleClosedLock(tx,id,root.cycle.id,request.auth.userId);}await audit(tx,request,{entityType:'TaskCycle',entityId:root.cycle.id,action:'TASK_CANCELLED',afterJson:{closedAt:now,cancelledSubtasks:children.length},reason:input.reason});await outbox(tx,id,root.cycle,'TASK_CANCELLED');return presentTask(await tx.task.findUnique({where:{id},include:includeCurrent}));}})},
 
-  async reopen(request,id,input,key){return restartCycle(prisma,request,id,input,key,'reopen')},
+  async reopen(request,id,input,key){return restartCycle(prisma,request,id,input,key,'reopen',chatLockService)},
 
-  async restore(request,id,input,key){return restartCycle(prisma,request,id,input,key,'restore')},
+  async restore(request,id,input,key){return restartCycle(prisma,request,id,input,key,'restore',chatLockService)},
 });
