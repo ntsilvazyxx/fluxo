@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "test": "npm run prisma:generate && npm run test:safe",
     "test:safe": "node scripts/run-safe-tests.js",
-    "test:chat:safe": "node --test test/chat/chat-core.test.js test/chat/chat-locks.test.js test/chat/chat-messages.test.js test/chat/chat-services.test.js test/chat/chat-homologation-guard.test.js test/chat/chat-attachment-storage.test.js test/chat/chat-attachment-validation.test.js test/chat/chat-attachment-scanner.test.js test/chat/chat-attachment-service.test.js test/chat/chat-attachment-routes.test.js test/chat/chat-message-attachments.test.js test/chat/chat-attachment-download.test.js",
+    "test:chat:safe": "node --test test/chat/chat-core.test.js test/chat/chat-locks.test.js test/chat/chat-messages.test.js test/chat/chat-services.test.js test/chat/chat-homologation-guard.test.js test/chat/chat-attachment-storage.test.js test/chat/chat-attachment-validation.test.js test/chat/chat-attachment-scanner.test.js test/chat/chat-attachment-service.test.js test/chat/chat-attachment-routes.test.js test/chat/chat-message-attachments.test.js test/chat/chat-attachment-download.test.js test/chat/chat-attachment-reconciliation.test.js",
     "test:chat:real": "node scripts/run-chat-real-homologation.js",
     "test:integration": "npm run prisma:generate && dotenv -e ../.env -- node scripts/run-integration.js",
     "db:check": "dotenv -e ../.env -- node scripts/check-database.js",

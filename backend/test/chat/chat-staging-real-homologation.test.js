@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import { after, before, describe, it } from 'node:test';
 import { createPrismaClient } from '../../src/infrastructure/database/prisma.js';
 import { createChatService } from '../../src/modules/chat/chat.service.js';
@@ -11,6 +12,7 @@ import { createChatLockService } from '../../src/modules/chat/chat-lock.service.
 import { createLocalChatAttachmentStorage } from '../../src/modules/chat/chat-attachment.local-storage.js';
 import { createChatAttachmentService } from '../../src/modules/chat/chat-attachment.service.js';
 import { createChatMessageService } from '../../src/modules/chat/chat-message.service.js';
+import { createChatAttachmentReconciliationService } from '../../src/modules/chat/chat-attachment-reconciliation.service.js';
 import {
   assertChatHomologationDatabase,
   getChatHomologationDatabaseUrl,
@@ -735,6 +737,273 @@ realHomologation('FASE 5.1.2.1 / 5.1.3 — Homologação Integrada Real do Stagi
         ),
         (err) => err.status === 404 && err.code === 'CHAT_ATTACHMENT_NOT_FOUND',
       );
+    });
+  });
+
+  describe('SUITE 7: RECONCILIAÇÃO REAL NO MARIADB (FASE 5.1.5)', () => {
+    let reconciler;
+
+    before(() => {
+      reconciler = createChatAttachmentReconciliationService({
+        prisma,
+        storage,
+      });
+    });
+
+    it('reconciliação real de mensagem PENDING com anexo CLAIMED em staging', async () => {
+      const content = Buffer.from('conteudo real de reconciliacao 1');
+      const staged = await storage.writeStaging(Readable.from([content]));
+
+      const uploadId = randomUUID();
+      const messageId = randomUUID();
+      const clientMessageId = randomUUID();
+      const currentTime = new Date();
+
+      await prisma.chatMessage.create({
+        data: {
+          id: messageId,
+          conversationId,
+          cycleId,
+          authorId: userTech1.id,
+          sequenceNumber: 9901,
+          clientMessageId,
+          content: 'Mensagem interrompida antes da promoção',
+          status: 'PENDING',
+          createdAt: currentTime,
+        },
+      });
+
+      await prisma.chatAttachmentUpload.create({
+        data: {
+          id: uploadId,
+          conversationId,
+          uploadedById: userTech1.id,
+          clientUploadId: randomUUID(),
+          messageId,
+          originalName: 'reconciliacao_real_1.txt',
+          stagingKey: staged.key,
+          targetStorageKey: null,
+          mimeType: 'text/plain',
+          extension: 'txt',
+          sizeBytes: staged.sizeBytes,
+          sha256: staged.sha256,
+          status: 'CLAIMED',
+          expiresAt: new Date(Date.now() + 86400000),
+          claimedAt: currentTime,
+          updatedAt: currentTime,
+        },
+      });
+
+      const results = await reconciler.reconcilePendingMessages({ workerToken: 'worker-real-1' });
+      const msgResult = results.find((r) => r.messageId === messageId);
+      assert.ok(msgResult, 'Mensagem deve ser processada');
+      assert.equal(msgResult.status, 'RECONCILED');
+
+      const updatedMessage = await prisma.chatMessage.findUnique({ where: { id: messageId } });
+      assert.equal(updatedMessage.status, 'PUBLISHED');
+      assert.ok(updatedMessage.publishedAt);
+      assert.equal(updatedMessage.reconciliationClaimToken, null);
+      assert.equal(updatedMessage.reconciliationClaimExpiresAt, null);
+
+      const updatedUpload = await prisma.chatAttachmentUpload.findUnique({ where: { id: uploadId } });
+      assert.equal(updatedUpload.status, 'PROMOTED');
+      assert.ok(updatedUpload.promotedAt);
+      assert.ok(updatedUpload.targetStorageKey);
+
+      assert.equal(await storage.exists(updatedUpload.targetStorageKey), true);
+
+      const attachments = await prisma.chatMessageAttachment.findMany({ where: { messageId } });
+      assert.equal(attachments.length, 1);
+      assert.equal(attachments[0].storagePath, updatedUpload.targetStorageKey);
+      assert.equal(attachments[0].sourceUploadId, uploadId);
+
+      const audits = await prisma.auditEvent.findMany({
+        where: { entityType: 'CHAT_MESSAGE', entityId: messageId },
+      });
+      assert.ok(audits.length > 0);
+      assert.equal(audits[0].action, 'CHAT_MESSAGE_RECONCILED');
+    });
+
+    it('reconciliação real de anexo já promovido fisicamente no MariaDB sem duplicação', async () => {
+      const content = Buffer.from('conteudo ja promovido fisicamente');
+      const staged = await storage.writeStaging(Readable.from([content]));
+      const targetKey = storage.createObjectKey();
+      await storage.promote(staged.key, targetKey, { sizeBytes: staged.sizeBytes, sha256: staged.sha256 });
+
+      const uploadId = randomUUID();
+      const messageId = randomUUID();
+      const clientMessageId = randomUUID();
+      const currentTime = new Date();
+
+      await prisma.chatMessage.create({
+        data: {
+          id: messageId,
+          conversationId,
+          cycleId,
+          authorId: userTech1.id,
+          sequenceNumber: 9902,
+          clientMessageId,
+          content: 'Mensagem com anexo ja em objects',
+          status: 'PENDING',
+          createdAt: currentTime,
+        },
+      });
+
+      await prisma.chatAttachmentUpload.create({
+        data: {
+          id: uploadId,
+          conversationId,
+          uploadedById: userTech1.id,
+          clientUploadId: randomUUID(),
+          messageId,
+          originalName: 'ja_em_objects.txt',
+          stagingKey: staged.key,
+          targetStorageKey: targetKey,
+          mimeType: 'text/plain',
+          extension: 'txt',
+          sizeBytes: staged.sizeBytes,
+          sha256: staged.sha256,
+          status: 'CLAIMED',
+          expiresAt: new Date(Date.now() + 86400000),
+          claimedAt: currentTime,
+          updatedAt: currentTime,
+        },
+      });
+
+      const results = await reconciler.reconcilePendingMessages({ workerToken: 'worker-real-2' });
+      const msgResult = results.find((r) => r.messageId === messageId);
+      assert.equal(msgResult.status, 'RECONCILED');
+
+      const updatedMessage = await prisma.chatMessage.findUnique({ where: { id: messageId } });
+      assert.equal(updatedMessage.status, 'PUBLISHED');
+
+      const attachments = await prisma.chatMessageAttachment.findMany({ where: { messageId } });
+      assert.equal(attachments.length, 1);
+      assert.equal(attachments[0].storagePath, targetKey);
+    });
+
+    it('concorrência real entre workers via lease atômico no MariaDB', async () => {
+      const messageId = randomUUID();
+      const currentTime = new Date();
+
+      await prisma.chatMessage.create({
+        data: {
+          id: messageId,
+          conversationId,
+          cycleId,
+          authorId: userTech1.id,
+          sequenceNumber: 9903,
+          clientMessageId: randomUUID(),
+          content: 'Mensagem sob disputa de concorrência',
+          status: 'PENDING',
+          createdAt: currentTime,
+        },
+      });
+
+      const worker1Acquired = await reconciler.acquireMessageLease(messageId, {
+        workerToken: 'worker-1-token',
+        durationMs: 60_000,
+      });
+      assert.equal(worker1Acquired, true);
+
+      const worker2Acquired = await reconciler.acquireMessageLease(messageId, {
+        workerToken: 'worker-2-token',
+        durationMs: 60_000,
+      });
+      assert.equal(worker2Acquired, false);
+
+      const results = await reconciler.reconcilePendingMessages({ workerToken: 'worker-2-token' });
+      const touched = results.find((r) => r.messageId === messageId);
+      assert.equal(touched, undefined); // Mensagem com lease ativo de outro worker não é tocada
+    });
+
+    it('expiração segura de staging vencido no MariaDB e remoção física do arquivo', async () => {
+      const content = Buffer.from('arquivo para expirar');
+      const staged = await storage.writeStaging(Readable.from([content]));
+      const uploadId = randomUUID();
+      const pastDate = new Date(Date.now() - 3600_000);
+
+      await prisma.chatAttachmentUpload.create({
+        data: {
+          id: uploadId,
+          conversationId,
+          uploadedById: userTech1.id,
+          clientUploadId: randomUUID(),
+          originalName: 'expirado_real.txt',
+          stagingKey: staged.key,
+          mimeType: 'text/plain',
+          extension: 'txt',
+          sizeBytes: staged.sizeBytes,
+          sha256: staged.sha256,
+          status: 'READY',
+          expiresAt: pastDate,
+          updatedAt: pastDate,
+        },
+      });
+
+      const cleanupResults = await reconciler.cleanupExpiredStaging();
+      const expiredItem = cleanupResults.find((r) => r.uploadId === uploadId);
+      assert.ok(expiredItem);
+      assert.equal(expiredItem.status, 'EXPIRED');
+
+      const uploadInDb = await prisma.chatAttachmentUpload.findUnique({ where: { id: uploadId } });
+      assert.equal(uploadInDb.status, 'EXPIRED');
+      assert.equal(await storage.exists(staged.key), false);
+    });
+
+    it('dry-run no MariaDB real com garantia estrita de zero mutações', async () => {
+      const content = Buffer.from('arquivo dry run real');
+      const staged = await storage.writeStaging(Readable.from([content]));
+      const uploadId = randomUUID();
+      const messageId = randomUUID();
+      const currentTime = new Date();
+
+      await prisma.chatMessage.create({
+        data: {
+          id: messageId,
+          conversationId,
+          cycleId,
+          authorId: userTech1.id,
+          sequenceNumber: 9904,
+          clientMessageId: randomUUID(),
+          content: 'Mensagem para teste de dry-run real',
+          status: 'PENDING',
+          createdAt: currentTime,
+        },
+      });
+
+      await prisma.chatAttachmentUpload.create({
+        data: {
+          id: uploadId,
+          conversationId,
+          uploadedById: userTech1.id,
+          clientUploadId: randomUUID(),
+          messageId,
+          originalName: 'dryrun_real.txt',
+          stagingKey: staged.key,
+          mimeType: 'text/plain',
+          extension: 'txt',
+          sizeBytes: staged.sizeBytes,
+          sha256: staged.sha256,
+          status: 'CLAIMED',
+          expiresAt: new Date(Date.now() + 86400000),
+          claimedAt: currentTime,
+          updatedAt: currentTime,
+        },
+      });
+
+      const report = await reconciler.runFullReconciliation({ dryRun: true });
+      assert.equal(report.dryRun, true);
+      const msgResult = report.messages.find((m) => m.messageId === messageId);
+      assert.equal(msgResult.status, 'WOULD_RECONCILE');
+
+      const unchangedMsg = await prisma.chatMessage.findUnique({ where: { id: messageId } });
+      assert.equal(unchangedMsg.status, 'PENDING');
+      assert.equal(unchangedMsg.publishedAt, null);
+
+      const unchangedUpload = await prisma.chatAttachmentUpload.findUnique({ where: { id: uploadId } });
+      assert.equal(unchangedUpload.status, 'CLAIMED');
+      assert.equal(await storage.exists(staged.key), true);
     });
   });
 });

@@ -6,6 +6,7 @@ import {
   lstat,
   mkdir,
   open,
+  readdir,
   realpath,
   rm,
 } from 'node:fs/promises';
@@ -94,6 +95,7 @@ export function createLocalChatAttachmentStorage({
     lstat,
     mkdir,
     open,
+    readdir,
     realpath,
     rm,
     ...operations,
@@ -455,6 +457,60 @@ export function createLocalChatAttachmentStorage({
           throw mapIoError(error, 'Não foi possível remover o arquivo temporário.');
         }
       });
+    },
+
+    async listKeys(kind) {
+      if (![KINDS.STAGING, KINDS.OBJECT, KINDS.QUARANTINE].includes(kind)) {
+        throw storageError(CODES.INVALID_KEY, 'Tipo de chave inválido para listagem.');
+      }
+      await ensureLayout();
+      const baseDir = path.join(root, kind);
+      const keys = [];
+
+      const safeReaddir = async (dir) => {
+        try {
+          return await fs.readdir(dir, { withFileTypes: true });
+        } catch (err) {
+          if (isMissing(err)) return [];
+          throw mapIoError(err, 'Falha ao ler diretório do storage.');
+        }
+      };
+
+      if (kind === KINDS.STAGING) {
+        const entries = await safeReaddir(baseDir);
+        for (const entry of entries) {
+          if (entry.isFile()) {
+            const candidateKey = `${kind}/${entry.name}`;
+            try {
+              validateStorageKey(candidateKey, kind);
+              keys.push(candidateKey);
+            } catch {
+              // ignore non-matching or temp files
+            }
+          }
+        }
+      } else {
+        const partitions = await safeReaddir(baseDir);
+        for (const partition of partitions) {
+          if (partition.isDirectory() && /^[0-9a-f]{2}$/i.test(partition.name)) {
+            const partitionPath = path.join(baseDir, partition.name);
+            const entries = await safeReaddir(partitionPath);
+            for (const entry of entries) {
+              if (entry.isFile()) {
+                const candidateKey = `${kind}/${partition.name}/${entry.name}`;
+                try {
+                  validateStorageKey(candidateKey, kind);
+                  keys.push(candidateKey);
+                } catch {
+                  // ignore non-matching or temp files
+                }
+              }
+            }
+          }
+        }
+      }
+
+      return keys;
     },
   };
 

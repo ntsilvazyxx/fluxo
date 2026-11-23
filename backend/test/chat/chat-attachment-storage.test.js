@@ -354,4 +354,24 @@ describe('storage privado local dos anexos do Chat — Fase 5.1.1', () => {
     assert.match(root, /seaf-chat-storage-test-/);
     assert.doesNotMatch(root, /backend[\\/]storage[\\/](attachments|images)/i);
   });
+
+  it('lista chaves internas com listKeys(kind) para staging, objects e quarantine', async () => {
+    const storage = createLocalChatAttachmentStorage({ rootPath: root });
+    const staged1 = await storage.writeStaging(Readable.from(['d1']));
+    const staged2 = await storage.writeStaging(Readable.from(['d2']));
+
+    const objKey1 = storage.createObjectKey();
+    await storage.promote(staged1.key, objKey1, { sizeBytes: staged1.sizeBytes, sha256: staged1.sha256 });
+
+    const qKey1 = `quarantine/${randomUUID().slice(0, 2)}/${randomUUID()}.quarantine`;
+    await storage.quarantine(staged2.key, { quarantineKey: qKey1, sizeBytes: staged2.sizeBytes, sha256: staged2.sha256 });
+
+    const stagingKeys = await storage.listKeys('staging');
+    const objectKeys = await storage.listKeys('objects');
+    const quarantineKeys = await storage.listKeys('quarantine');
+
+    assert.equal(stagingKeys.length, 0); // Both were promoted / quarantined
+    assert.deepEqual(objectKeys, [objKey1]);
+    assert.deepEqual(quarantineKeys, [qKey1]);
+  });
 });
