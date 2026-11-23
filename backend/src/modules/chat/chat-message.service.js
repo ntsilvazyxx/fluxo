@@ -5,6 +5,7 @@ import {
   isTaskManager,
   canSendMessage,
   canReadMessageContent,
+  canDownloadAttachment,
   canAdvanceReadCursor,
 } from './chat.policy.js';
 import {
@@ -776,9 +777,203 @@ export const createChatMessageService = ({
     });
   };
 
+  const getAttachmentForDownload = async (actor, taskId, messageId, attachmentId, correlationId = randomUUID()) => {
+    const task = await prisma.task.findUnique({
+      where: { id: taskId, deletedAt: null },
+      include: {
+        team: {
+          include: {
+            managers: {
+              where: { endedAt: null },
+            },
+          },
+        },
+      },
+    });
+
+    if (!task) {
+      throw new AppError(404, 'TASK_NOT_FOUND', 'Tarefa não encontrada.');
+    }
+
+    const conversation = await prisma.chatConversation.findUnique({
+      where: { taskId },
+      include: { lockState: true },
+    });
+
+    if (!conversation) {
+      throw new AppError(404, 'CHAT_NOT_INITIALIZED', 'O chat desta tarefa ainda não foi inicializado.');
+    }
+
+    const message = await prisma.chatMessage.findUnique({
+      where: { id: messageId },
+    });
+
+    if (!message || message.conversationId !== conversation.id || message.status !== 'PUBLISHED') {
+      throw new AppError(404, 'CHAT_ATTACHMENT_NOT_FOUND', 'Anexo não encontrado ou não disponível para download.');
+    }
+
+    const attachment = await prisma.chatMessageAttachment.findUnique({
+      where: { id: attachmentId },
+      include: { sourceUpload: true },
+    });
+
+    if (!attachment || attachment.messageId !== message.id) {
+      throw new AppError(404, 'CHAT_ATTACHMENT_NOT_FOUND', 'Anexo não encontrado ou não disponível para download.');
+    }
+
+    const participant = await prisma.chatParticipant.findUnique({
+      where: {
+        conversationId_userId: {
+          conversationId: conversation.id,
+          userId: actor.userId,
+        },
+      },
+      include: {
+        periods: {
+          orderBy: { joinedAt: 'asc' },
+        },
+      },
+    });
+
+    const isManager = isTaskManager(actor, task);
+    const authorized = canDownloadAttachment(
+      actor,
+      task,
+      conversation,
+      conversation.lockState,
+      participant,
+      isManager,
+      message,
+    );
+
+    if (!authorized) {
+      if (prisma.auditEvent?.create) {
+        await prisma.auditEvent.create({
+          data: {
+            id: id(),
+            actorId: actor.userId,
+            entityType: 'ChatMessageAttachment',
+            entityId: attachment.id,
+            action: 'CHAT_ATTACHMENT_DOWNLOAD_DENIED',
+            afterJson: {
+              taskId,
+              conversationId: conversation.id,
+              messageId: message.id,
+              attachmentId: attachment.id,
+              outcome: 'DENIED',
+              failureCode: 'FORBIDDEN',
+            },
+            correlationId,
+          },
+        }).catch(() => undefined);
+      }
+      throw new AppError(404, 'CHAT_ATTACHMENT_NOT_FOUND', 'Anexo não encontrado ou não disponível para download.');
+    }
+
+    if (!storage) {
+      throw new AppError(503, 'CHAT_STORAGE_UNAVAILABLE', 'Armazenamento privado de anexos não configurado.');
+    }
+
+    let fileExists;
+    try {
+      fileExists = await storage.exists(attachment.storagePath);
+    } catch {
+      throw new AppError(503, 'CHAT_STORAGE_UNAVAILABLE', 'Falha ao consultar armazenamento privado.');
+    }
+
+    if (!fileExists) {
+      if (prisma.auditEvent?.create) {
+        await prisma.auditEvent.create({
+          data: {
+            id: id(),
+            actorId: actor.userId,
+            entityType: 'ChatMessageAttachment',
+            entityId: attachment.id,
+            action: 'CHAT_ATTACHMENT_DOWNLOAD_UNAVAILABLE',
+            afterJson: {
+              taskId,
+              conversationId: conversation.id,
+              messageId: message.id,
+              attachmentId: attachment.id,
+              outcome: 'UNAVAILABLE',
+              failureCode: 'FILE_NOT_FOUND',
+            },
+            correlationId,
+          },
+        }).catch(() => undefined);
+      }
+      throw new AppError(404, 'CHAT_ATTACHMENT_FILE_MISSING', 'O arquivo físico do anexo não foi encontrado no storage.');
+    }
+
+    let stream;
+    try {
+      stream = await storage.openReadStream(attachment.storagePath);
+    } catch {
+      throw new AppError(503, 'CHAT_STORAGE_UNAVAILABLE', 'Não foi possível abrir o arquivo para streaming.');
+    }
+
+    if (prisma.auditEvent?.create) {
+      await prisma.auditEvent.create({
+        data: {
+          id: id(),
+          actorId: actor.userId,
+          entityType: 'ChatMessageAttachment',
+          entityId: attachment.id,
+          action: 'CHAT_ATTACHMENT_DOWNLOADED',
+          afterJson: {
+            taskId,
+            conversationId: conversation.id,
+            messageId: message.id,
+            attachmentId: attachment.id,
+            outcome: 'SUCCESS',
+            sizeBytes: Number(attachment.sizeBytes),
+            mimeType: attachment.mimeType,
+          },
+          correlationId,
+        },
+      }).catch(() => undefined);
+    }
+
+    return {
+      stream,
+      attachmentId: attachment.id,
+      originalName: attachment.originalName,
+      mimeType: attachment.mimeType,
+      sizeBytes: Number(attachment.sizeBytes),
+      taskId,
+      conversationId: conversation.id,
+      messageId: message.id,
+    };
+  };
+
+  const recordDownloadStreamFailure = async (actor, downloadInfo, correlationId = randomUUID()) => {
+    if (prisma?.auditEvent?.create && downloadInfo?.attachmentId) {
+      await prisma.auditEvent.create({
+        data: {
+          id: id(),
+          actorId: actor?.userId ?? null,
+          entityType: 'ChatMessageAttachment',
+          entityId: downloadInfo.attachmentId,
+          action: 'CHAT_ATTACHMENT_DOWNLOAD_STREAM_FAILED',
+          afterJson: {
+            taskId: downloadInfo.taskId,
+            conversationId: downloadInfo.conversationId,
+            messageId: downloadInfo.messageId,
+            attachmentId: downloadInfo.attachmentId,
+            outcome: 'STREAM_FAILED',
+            failureCode: 'STREAM_ABORTED',
+          },
+          correlationId,
+        },
+      }).catch(() => undefined);
+    }
+  };
+
   return {
     sendMessage,
     listMessages,
     advanceReadCursor,
+    getAttachmentForDownload,
+    recordDownloadStreamFailure,
   };
 };

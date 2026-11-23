@@ -144,13 +144,13 @@ export function canInitializeConversation(actor, task, conversation, isManager =
 /**
  * 7. Download de Anexos de Mensagens.
  *
- * REGRAS:
- * - Deve possuir autorização de leitura da mensagem correspondente.
- * - Chat deve estar DESBLOQUEADO. Durante bloqueios ativos, downloads de anexos históricos
- *   ficam temporariamente vedados.
+ * REGRAS (Fase 5.1.4):
+ * - Deve possuir autorização histórica de leitura da mensagem correspondente.
+ * - Bloqueios do Chat (administrativo, solicitação pendente, ciclo concluído/cancelado)
+ *   impedem novos envios (canSendMessage), mas NÃO impedem a leitura ou download
+ *   de anexos já publicados por participantes com autorização histórica válida.
  */
 export function canDownloadAttachment(actor, task, conversation, lockState, participant, isManager = false, message = null) {
-  if (lockState?.isLocked) return false;
   return canReadMessageContent(actor, task, conversation, participant, isManager, message);
 }
 

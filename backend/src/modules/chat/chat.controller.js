@@ -146,4 +146,71 @@ export const createChatController = ({
     const data = await attachmentService.cancel(req.auth, taskId, uploadId, req.correlationId);
     res.status(200).json({ data });
   },
+
+  async downloadAttachment(req, res, next) {
+    const taskId = req.validated?.params?.taskId ?? req.params.taskId;
+    const messageId = req.validated?.params?.messageId ?? req.params.messageId;
+    const attachmentId = req.validated?.params?.attachmentId ?? req.params.attachmentId;
+    const correlationId = req.correlationId;
+
+    const downloadInfo = await messageService.getAttachmentForDownload(
+      req.auth,
+      taskId,
+      messageId,
+      attachmentId,
+      correlationId,
+    );
+
+    const cleanName = (downloadInfo.originalName || 'attachment')
+      .replace(/[\r\n\0\t]/g, '')
+      .replace(/[/\\]/g, '_')
+      .replace(/["']/g, '')
+      .trim() || 'attachment';
+
+    const safeAscii = cleanName
+      .replace(/[^\x20-\x7E]/g, '_')
+      .trim() || 'attachment';
+
+    const encodedUtf8 = encodeURIComponent(cleanName)
+      .replace(/['()]/g, escape)
+      .replace(/\*/g, '%2A');
+
+    res.setHeader('Content-Type', downloadInfo.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeAscii}"; filename*=UTF-8''${encodedUtf8}`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    if (downloadInfo.sizeBytes) {
+      res.setHeader('Content-Length', downloadInfo.sizeBytes.toString());
+    }
+
+    let finished = false;
+    const stream = downloadInfo.stream;
+
+    req.on('close', () => {
+      if (!finished) {
+        finished = true;
+        stream?.destroy();
+      }
+    });
+
+    stream.on('error', async (err) => {
+      finished = true;
+      if (typeof messageService.recordDownloadStreamFailure === 'function') {
+        await messageService.recordDownloadStreamFailure(req.auth, downloadInfo, correlationId).catch(() => undefined);
+      }
+      if (!res.headersSent) {
+        next(err);
+      } else {
+        res.destroy(err);
+      }
+    });
+
+    res.on('finish', () => {
+      finished = true;
+    });
+
+    stream.pipe(res);
+  },
 });

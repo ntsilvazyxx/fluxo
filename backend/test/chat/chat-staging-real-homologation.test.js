@@ -532,5 +532,210 @@ realHomologation('FASE 5.1.2.1 / 5.1.3 — Homologação Integrada Real do Stagi
       );
     });
   });
+
+  describe('Suíte 6: Fase 5.1.4 — Download Seguro, Histórico de Participação e Controle de Acesso', () => {
+    let publishedMessage;
+    let publishedAttachment;
+    let publishedFileContent;
+
+    before(async () => {
+      publishedFileContent = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF');
+      const fixture = await createFixtureFile('documento_real.pdf', publishedFileContent);
+      const staged = await attachmentService.stage(actorTech1, taskId, randomUUID(), fixture);
+
+      const sent = await messageService.sendMessage(actorTech1, taskId, {
+        clientMessageId: randomUUID(),
+        content: 'Mensagem com anexo homologado para download',
+        stagedAttachmentIds: [staged.id],
+      });
+
+      publishedMessage = sent;
+      publishedAttachment = sent.attachments[0];
+    });
+
+    it('download autorizado via stream no MariaDB real com auditoria persistida', async () => {
+      const downloadInfo = await messageService.getAttachmentForDownload(
+        actorTech1,
+        taskId,
+        publishedMessage.id,
+        publishedAttachment.id,
+      );
+
+      assert.ok(downloadInfo.stream);
+      assert.equal(downloadInfo.attachmentId, publishedAttachment.id);
+      assert.equal(downloadInfo.originalName, 'documento_real.pdf');
+      assert.equal(downloadInfo.mimeType, 'application/pdf');
+
+      // Consome o stream e valida o conteúdo exato
+      const chunks = [];
+      for await (const chunk of downloadInfo.stream) {
+        chunks.push(chunk);
+      }
+      const downloaded = Buffer.concat(chunks);
+      assert.deepEqual(downloaded, publishedFileContent);
+
+      // Valida registro de auditoria persistido no banco real
+      const audit = await prisma.auditEvent.findFirst({
+        where: {
+          entityType: 'ChatMessageAttachment',
+          entityId: publishedAttachment.id,
+          action: 'CHAT_ATTACHMENT_DOWNLOADED',
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      assert.ok(audit, 'Evento de auditoria deve ser persistido no MariaDB');
+      assert.equal(audit.actorId, actorTech1.userId);
+      assert.equal(audit.afterJson.outcome, 'SUCCESS');
+      assert.equal(audit.afterJson.taskId, taskId);
+    });
+
+    it('participante removido: pode baixar mensagens anteriores, mas NÃO posteriores ao encerramento', async () => {
+      // 1. Participante tech2 está ativo e pode baixar a mensagem anterior
+      const infoBefore = await messageService.getAttachmentForDownload(
+        actorTech2,
+        taskId,
+        publishedMessage.id,
+        publishedAttachment.id,
+      );
+      assert.ok(infoBefore.stream);
+
+      // 2. Remove tech2 da conversa
+      const participantTech2 = await prisma.chatParticipant.findUnique({
+        where: { conversationId_userId: { conversationId, userId: actorTech2.userId } },
+      });
+      await participantService.removeParticipant(actorMgr, taskId, participantTech2.id, 'REMOVED_BY_MANAGER');
+
+      // 3. Publica nova mensagem após remoção de tech2
+      const fPost = await createFixtureFile('pos_remocao.txt', 'conteudo pos remocao');
+      const stagedPost = await attachmentService.stage(actorTech1, taskId, randomUUID(), fPost);
+      const msgPost = await messageService.sendMessage(actorTech1, taskId, {
+        clientMessageId: randomUUID(),
+        content: 'Mensagem postada apos remocao de tech2',
+        stagedAttachmentIds: [stagedPost.id],
+      });
+      const attPost = msgPost.attachments[0];
+
+      // 4. tech2 ainda PODE baixar anexo anterior
+      const infoPast = await messageService.getAttachmentForDownload(
+        actorTech2,
+        taskId,
+        publishedMessage.id,
+        publishedAttachment.id,
+      );
+      assert.ok(infoPast.stream);
+
+      // 5. tech2 é BLOQUEADO de baixar o anexo posterior ao encerramento (404 seguro)
+      await assert.rejects(
+        () => messageService.getAttachmentForDownload(
+          actorTech2,
+          taskId,
+          msgPost.id,
+          attPost.id,
+        ),
+        (err) => err.status === 404 && err.code === 'CHAT_ATTACHMENT_NOT_FOUND',
+      );
+
+      // Confirma registro de auditoria de negação
+      const auditDenied = await prisma.auditEvent.findFirst({
+        where: {
+          entityType: 'ChatMessageAttachment',
+          entityId: attPost.id,
+          action: 'CHAT_ATTACHMENT_DOWNLOAD_DENIED',
+        },
+      });
+      assert.ok(auditDenied);
+      assert.equal(auditDenied.actorId, actorTech2.userId);
+    });
+
+    it('download durante bloqueio administrativo do chat permanece autorizado para participantes', async () => {
+      // Aplica bloqueio administrativo
+      await lockService.adminLock(actorAdmin, taskId, {
+        isLocked: true,
+        reason: 'ADMIN_MAINTENANCE',
+        justification: 'Manutenção técnica de homologação',
+      });
+
+      // Confirma que envio de mensagem está bloqueado
+      await assert.rejects(
+        () => messageService.sendMessage(actorTech1, taskId, {
+          clientMessageId: randomUUID(),
+          content: 'Tentativa durante lock',
+        }),
+        (err) => err.status === 423,
+      );
+
+      // Mas o download de anexo publicado permanece 100% autorizado
+      const downloadInfo = await messageService.getAttachmentForDownload(
+        actorTech1,
+        taskId,
+        publishedMessage.id,
+        publishedAttachment.id,
+      );
+      assert.ok(downloadInfo.stream);
+
+      // Desbloqueia
+      await lockService.adminLock(actorAdmin, taskId, {
+        isLocked: false,
+        reason: 'ADMIN_MAINTENANCE',
+        justification: 'Fim da manutenção',
+      });
+    });
+
+    it('isolamento de conversa: anexo de uma tarefa é estritamente inacessível através de outra tarefa', async () => {
+      // Cria uma segunda tarefa com outra conversa
+      const task2Id = randomUUID();
+      const cycle2Id = randomUUID();
+      await prisma.task.create({
+        data: {
+          id: task2Id,
+          teamId,
+          createdById: userMgr.id,
+          version: 1,
+        },
+      });
+      await prisma.taskCycle.create({
+        data: {
+          id: cycle2Id,
+          taskId: task2Id,
+          cycleNumber: 1,
+          title: 'Ciclo da Segunda Tarefa Isolada',
+          description: 'Descrição da Segunda Tarefa Isolada',
+          status: 'IN_PROGRESS',
+          openedAt: new Date(),
+          version: 1,
+        },
+      });
+      await prisma.task.update({
+        where: { id: task2Id },
+        data: { currentCycleId: cycle2Id },
+      });
+      await chatService.ensureConversationForTask(prisma, task2Id, cycle2Id, userMgr.id, userTech1.id);
+
+      // Tenta acessar o anexo da tarefa 1 usando taskId da tarefa 2
+      await assert.rejects(
+        () => messageService.getAttachmentForDownload(
+          actorTech1,
+          task2Id,
+          publishedMessage.id,
+          publishedAttachment.id,
+        ),
+        (err) => err.status === 404 && err.code === 'CHAT_ATTACHMENT_NOT_FOUND',
+      );
+    });
+
+    it('ADMIN_MASTER e SECRETARY sem participação formal têm acesso bloqueado a anexos privados', async () => {
+      // ADMIN_MASTER tenta baixar anexo privado
+      await assert.rejects(
+        () => messageService.getAttachmentForDownload(
+          actorAdmin,
+          taskId,
+          publishedMessage.id,
+          publishedAttachment.id,
+        ),
+        (err) => err.status === 404 && err.code === 'CHAT_ATTACHMENT_NOT_FOUND',
+      );
+    });
+  });
 });
 

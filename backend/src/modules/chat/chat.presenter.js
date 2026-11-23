@@ -100,6 +100,7 @@ export const presentAttachment = (attachment, context = {}) => {
   return {
     id: attachment.id,
     messageId: attachment.messageId ?? (messageId !== ':messageId' ? messageId : undefined),
+    position: attachment.position ?? null,
     originalName: attachment.originalName,
     mimeType: attachment.mimeType,
     sizeBytes: safeBigInt(attachment.sizeBytes),

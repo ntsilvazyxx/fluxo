@@ -633,7 +633,7 @@ describe('Chat Services, Participantes e Rotas (Fase 4.3)', () => {
           methods: Object.keys(layer.route.methods),
         }));
 
-      assert.equal(routes.length, 9, 'Devem ser registradas exatamente as 9 rotas autorizadas no router');
+      assert.equal(routes.length, 10, 'Devem ser registradas exatamente as 10 rotas autorizadas no router');
       assert.ok(routes.some((r) => r.path === '/:taskId/chat' && r.methods.includes('get')));
       assert.ok(routes.some((r) => r.path === '/:taskId/chat/init' && r.methods.includes('post')));
       assert.ok(routes.some((r) => r.path === '/:taskId/chat/participants' && r.methods.includes('get')));
@@ -641,6 +641,7 @@ describe('Chat Services, Participantes e Rotas (Fase 4.3)', () => {
       assert.ok(routes.some((r) => r.path === '/:taskId/chat/participants/:participantId' && r.methods.includes('delete')));
       assert.ok(routes.some((r) => r.path === '/:taskId/chat/messages' && r.methods.includes('get')));
       assert.ok(routes.some((r) => r.path === '/:taskId/chat/messages' && r.methods.includes('post')));
+      assert.ok(routes.some((r) => r.path === '/:taskId/chat/messages/:messageId/attachments/:attachmentId/download' && r.methods.includes('get')));
       assert.ok(routes.some((r) => r.path === '/:taskId/chat/read' && r.methods.includes('post')));
       assert.ok(routes.some((r) => r.path === '/:taskId/chat/lock' && r.methods.includes('post')));
     });

@@ -1,5 +1,16 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import dotenv from 'dotenv';
 import { getChatHomologationDatabaseUrl } from '../testing/chat-homologation-guard.js';
+
+const rootEnv = path.resolve(import.meta.dirname, '../../.env.homologation.local');
+const localEnv = path.resolve(import.meta.dirname, '../.env.homologation.local');
+if (existsSync(rootEnv)) {
+  dotenv.config({ path: rootEnv });
+} else if (existsSync(localEnv)) {
+  dotenv.config({ path: localEnv });
+}
 
 try {
   getChatHomologationDatabaseUrl();
@@ -10,6 +21,7 @@ try {
 
 const child = spawn(process.execPath, [
   '--test',
+  '--test-concurrency=1',
   'test/chat/chat-real-homologation.test.js',
   'test/chat/chat-staging-real-homologation.test.js',
 ], {

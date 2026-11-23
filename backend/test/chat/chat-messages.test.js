@@ -915,9 +915,10 @@ describe('Chat Messages Service, Histórico, Idempotência e Leitura (Fase 4.4)'
           methods: Object.keys(layer.route.methods),
         }));
 
-      assert.equal(routes.length, 9, 'Devem ser registradas exatamente 9 rotas autorizadas no router');
+      assert.equal(routes.length, 10, 'Devem ser registradas exatamente 10 rotas autorizadas no router');
       assert.ok(routes.some((r) => r.path === '/:taskId/chat/messages' && r.methods.includes('get')));
       assert.ok(routes.some((r) => r.path === '/:taskId/chat/messages' && r.methods.includes('post')));
+      assert.ok(routes.some((r) => r.path === '/:taskId/chat/messages/:messageId/attachments/:attachmentId/download' && r.methods.includes('get')));
       assert.ok(routes.some((r) => r.path === '/:taskId/chat/read' && r.methods.includes('post')));
       assert.ok(routes.some((r) => r.path === '/:taskId/chat/lock' && r.methods.includes('post')));
     });

@@ -628,9 +628,9 @@ describe('Chat Policy & RBAC (chat.policy.js)', () => {
       assert.equal(canDownloadAttachment(actorTechActive, task, conversation, lockUnlocked, participantActive, false, messageValid), true);
     });
 
-    it('BLOQUEIA download para todos os participantes quando chat está BLOQUEADO', () => {
-      assert.equal(canDownloadAttachment(actorTechActive, task, conversation, lockActive, participantActive, false, messageValid), false);
-      assert.equal(canDownloadAttachment(actorManager, task, conversation, lockActive, null, true, messageValid), false);
+    it('permite download para participantes com leitura mesmo quando chat está BLOQUEADO', () => {
+      assert.equal(canDownloadAttachment(actorTechActive, task, conversation, lockActive, participantActive, false, messageValid), true);
+      assert.equal(canDownloadAttachment(actorManager, task, conversation, lockActive, null, true, messageValid), true);
     });
 
     it('BLOQUEIA download para participante removido em mensagem posterior ao encerramento', () => {

@@ -29,6 +29,7 @@ import {
   stageAttachmentRouteSchema,
   getStagedAttachmentRouteSchema,
   cancelStagedAttachmentRouteSchema,
+  downloadAttachmentRouteSchema,
 } from './chat.schemas.js';
 
 const uploadTmpRoot = path.join(tmpdir(), 'seaf-chat-staged');
@@ -201,6 +202,12 @@ export const createTaskChatRouter = ({
     '/:taskId/chat/messages',
     validate(sendMessageRouteSchema),
     asyncHandler(controller.sendMessage),
+  );
+
+  router.get(
+    '/:taskId/chat/messages/:messageId/attachments/:attachmentId/download',
+    validate(downloadAttachmentRouteSchema),
+    asyncHandler(controller.downloadAttachment),
   );
 
   router.post(

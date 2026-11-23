@@ -182,3 +182,9 @@ export const cancelStagedAttachmentRouteSchema = z.object({
   query: emptySchema,
   body: emptySchema,
 });
+
+export const downloadAttachmentRouteSchema = z.object({
+  params: attachmentParamSchema,
+  query: emptySchema,
+  body: emptySchema,
+});
