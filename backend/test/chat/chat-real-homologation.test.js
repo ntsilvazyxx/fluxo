@@ -6,13 +6,15 @@ import { createChatService } from '../../src/modules/chat/chat.service.js';
 import { createChatParticipantService } from '../../src/modules/chat/chat-participant.service.js';
 import { createChatMessageService } from '../../src/modules/chat/chat-message.service.js';
 import { createChatLockService } from '../../src/modules/chat/chat-lock.service.js';
-import { createTaskService } from '../../src/modules/tasks/task.service.js';
-import { createRequestService } from '../../src/modules/requests/request.service.js';
 import { AppError } from '../../src/shared/errors/app-error.js';
+import {
+  assertChatHomologationDatabase,
+  getChatHomologationDatabaseUrl,
+} from '../../testing/chat-homologation-guard.js';
 
-const HOMOLOGATION_DATABASE_URL = 'mysql://root:@127.0.0.1:3306/seaf_chat_homologation';
+const realHomologation = process.env.RUN_CHAT_REAL_HOMOLOGATION === '1' ? describe : describe.skip;
 
-describe('FASE 4.6 — Homologação Integrada Real do Chat no MariaDB Isolado', () => {
+realHomologation('FASE 4.6 — Homologação Integrada Real do Chat no MariaDB Isolado', () => {
   let prisma;
   let concurrentPrisma;
 
@@ -48,9 +50,6 @@ describe('FASE 4.6 — Homologação Integrada Real do Chat no MariaDB Isolado',
   let participantService;
   let messageService;
   let lockService;
-  let taskService;
-  let requestService;
-
   // Helper para provisionar tarefa e conversa isolada para cada cenário
   async function setupTestTask({ taskId = randomUUID(), cycleId = randomUUID(), title = 'Tarefa Homolog' } = {}) {
     await prisma.task.create({
@@ -103,13 +102,12 @@ describe('FASE 4.6 — Homologação Integrada Real do Chat no MariaDB Isolado',
   }
 
   before(async () => {
-    prisma = createPrismaClient(HOMOLOGATION_DATABASE_URL, { connectionLimit: 10 });
-    concurrentPrisma = createPrismaClient(HOMOLOGATION_DATABASE_URL, { connectionLimit: 10 });
+    const homologationDatabaseUrl = getChatHomologationDatabaseUrl();
+    prisma = createPrismaClient(homologationDatabaseUrl, { connectionLimit: 10 });
+    concurrentPrisma = createPrismaClient(homologationDatabaseUrl, { connectionLimit: 10 });
 
-    // 1. Confirmação programática irrestrita do ambiente seguro
-    const [dbInfo] = await prisma.$queryRawUnsafe('SELECT DATABASE() as db, VERSION() as version');
-    assert.equal(dbInfo.db, 'seaf_chat_homologation', 'O banco conectado DEVE ser seaf_chat_homologation');
-    assert.match(dbInfo.version, /^10\.11\./, 'A versão DEVE ser MariaDB 10.11');
+    // 1. Confirmação programática do destino e da negação de acesso ao banco operacional.
+    await assertChatHomologationDatabase(prisma);
 
     // 2. Seed de usuários fictícios (cada execução usa IDs únicos)
     for (const u of [userAdmin, userSec, userMgr, userMgr2, userMgrOther, userTech1, userTech2, userTech3]) {
@@ -171,8 +169,6 @@ describe('FASE 4.6 — Homologação Integrada Real do Chat no MariaDB Isolado',
     chatService = createChatService({ prisma, participantService });
     messageService = createChatMessageService({ prisma });
     lockService = createChatLockService({ prisma });
-    taskService = createTaskService({ prisma, chatService, chatLockService: lockService });
-    requestService = createRequestService({ prisma, chatLockService: lockService });
   });
 
   after(async () => {

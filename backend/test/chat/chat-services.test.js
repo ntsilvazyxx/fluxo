@@ -474,7 +474,7 @@ describe('Chat Services, Participantes e Rotas (Fase 4.3)', () => {
     });
 
     it('re-adicionar participante anteriormente removido abre novo período sem sobreposição', async () => {
-      const { mockPrisma, getStore } = makeMockPrisma();
+      const { mockPrisma } = makeMockPrisma();
       const participantService = createChatParticipantService({ prisma: mockPrisma });
       const chatService = createChatService({ prisma: mockPrisma, participantService });
 

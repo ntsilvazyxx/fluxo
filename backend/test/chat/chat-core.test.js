@@ -30,7 +30,6 @@ import {
   canInitializeConversation,
   canDownloadAttachment,
   canAdvanceReadCursor,
-  canViewLockEvents,
   canAdministerLock,
   evaluateLockRelease,
 } from '../../src/modules/chat/chat.policy.js';
@@ -42,7 +41,6 @@ import {
   presentMessage,
   presentConversation,
   presentParticipant,
-  presentParticipantPeriod,
   presentLockState,
   presentLockEvent,
   presentReadReceipt,

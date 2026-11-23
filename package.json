@@ -14,6 +14,8 @@
     "build": "npm run build --workspace frontend",
     "lint": "npm run lint --workspaces",
     "test": "npm run test --workspaces",
+    "test:chat:safe": "npm run test:chat:safe --workspace backend",
+    "test:chat:real": "npm run test:chat:real --workspace backend",
     "check": "npm run lint && npm run test && npm run build && npm run prisma:validate",
     "prisma:generate": "npm run prisma:generate --workspace backend",
     "prisma:validate": "npm run prisma:validate --workspace backend",

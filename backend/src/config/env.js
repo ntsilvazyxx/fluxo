@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateProductionConfig } from './production-policy.js';
 
@@ -40,6 +41,9 @@ const required = (name) => {
   return value;
 };
 
+const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url));
+const resolveRepositoryPath = (value) => path.resolve(repositoryRoot, value);
+
 export const env = Object.freeze({
   nodeEnv: process.env.NODE_ENV ?? 'development',
   port: parsePort(process.env.PORT),
@@ -80,6 +84,42 @@ export const env = Object.freeze({
   attachmentUploadTimeoutMs: parsePositiveInteger('ATTACHMENT_UPLOAD_TIMEOUT_MS', process.env.ATTACHMENT_UPLOAD_TIMEOUT_MS, 300000),
   attachmentTechnicalMaxBytes: parsePositiveInteger('ATTACHMENT_TECHNICAL_MAX_BYTES', process.env.ATTACHMENT_TECHNICAL_MAX_BYTES, 1073741824),
   attachmentStagingTtlMinutes: parsePositiveInteger('ATTACHMENT_STAGING_TTL_MINUTES', process.env.ATTACHMENT_STAGING_TTL_MINUTES, 60),
+  // Fase 5.1.1: contrato de storage privado do Chat. O recurso HTTP permanece desabilitado.
+  chatAttachmentStorageEnabled: process.env.CHAT_ATTACHMENT_STORAGE_ENABLED === '1',
+  chatAttachmentStorageDriver: process.env.CHAT_ATTACHMENT_STORAGE_DRIVER ?? 'local',
+  chatAttachmentStoragePath:
+    (process.env.CHAT_ATTACHMENT_STORAGE_PATH
+      ? resolveRepositoryPath(process.env.CHAT_ATTACHMENT_STORAGE_PATH)
+      : fileURLToPath(new URL('../../storage/chat-attachments', import.meta.url))),
+  chatAttachmentStorageMaxBytes: parsePositiveInteger(
+    'CHAT_ATTACHMENT_STORAGE_MAX_BYTES',
+    process.env.CHAT_ATTACHMENT_STORAGE_MAX_BYTES,
+    20 * 1024 * 1024,
+  ),
+  chatAttachmentStorageTimeoutMs: parsePositiveInteger(
+    'CHAT_ATTACHMENT_STORAGE_TIMEOUT_MS',
+    process.env.CHAT_ATTACHMENT_STORAGE_TIMEOUT_MS,
+    300000,
+  ),
+  chatAttachmentStorageMaxConcurrentWrites: parsePositiveInteger(
+    'CHAT_ATTACHMENT_STORAGE_MAX_CONCURRENT_WRITES',
+    process.env.CHAT_ATTACHMENT_STORAGE_MAX_CONCURRENT_WRITES,
+    4,
+  ),
+  chatAttachmentStagingTtlMinutes: parsePositiveInteger(
+    'CHAT_ATTACHMENT_STAGING_TTL_MINUTES',
+    process.env.CHAT_ATTACHMENT_STAGING_TTL_MINUTES,
+    1440,
+  ),
+  chatAttachmentQuarantineDays: parsePositiveInteger(
+    'CHAT_ATTACHMENT_QUARANTINE_DAYS',
+    process.env.CHAT_ATTACHMENT_QUARANTINE_DAYS,
+    30,
+  ),
+  // Reservadas: não ativam scanner ou quotas nesta subfase.
+  chatAttachmentScannerEnabled: process.env.CHAT_ATTACHMENT_SCANNER_ENABLED === '1',
+  chatAttachmentUserQuotaBytes: process.env.CHAT_ATTACHMENT_USER_QUOTA_BYTES ?? '',
+  chatAttachmentConversationQuotaBytes: process.env.CHAT_ATTACHMENT_CONVERSATION_QUOTA_BYTES ?? '',
   mailEnabled: process.env.MAIL_ENABLED === '1',
   mailHost: process.env.MAIL_HOST ?? 'localhost',
   mailPort: parsePositiveInteger('MAIL_PORT', process.env.MAIL_PORT, 25),

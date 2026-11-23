@@ -348,7 +348,6 @@ describe('Chat Messages Service, Histórico, Idempotência e Leitura (Fase 4.4)'
   const actorAdmin = { userId: 'usr-admin', roleCode: 'ADMIN_MASTER' };
   const actorSec = { userId: 'usr-sec', roleCode: 'SECRETARY' };
   const actorMgrAlpha = { userId: 'usr-mgr-alpha', roleCode: 'MANAGER' };
-  const actorMgrBeta = { userId: 'usr-mgr-beta', roleCode: 'MANAGER' };
   const actorTech1 = { userId: 'usr-tech-1', roleCode: 'TECH' };
   const actorTech2 = { userId: 'usr-tech-2', roleCode: 'TECH' };
   const actorTech3 = { userId: 'usr-tech-3', roleCode: 'TECH' };

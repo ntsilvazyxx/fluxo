@@ -9,7 +9,7 @@ import {
 import { presentConversation } from './chat.presenter.js';
 import { ensureParticipantActive } from './chat-participant.service.js';
 
-export const createChatService = ({ prisma, participantService }) => {
+export const createChatService = ({ prisma }) => {
   const ensureConversationForTask = async (client, taskId, currentCycleId, creatorId, initialAssigneeId) => {
     let conversation = await client.chatConversation.findUnique({
       where: { taskId },

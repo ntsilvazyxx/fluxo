@@ -1,12 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { randomUUID } from 'node:crypto';
 import { createChatLockService } from '../../src/modules/chat/chat-lock.service.js';
 import { createChatMessageService } from '../../src/modules/chat/chat-message.service.js';
 import { createChatParticipantService } from '../../src/modules/chat/chat-participant.service.js';
 import { createChatService } from '../../src/modules/chat/chat.service.js';
 import { createChatController } from '../../src/modules/chat/chat.controller.js';
-import { createTaskChatRouter } from '../../src/modules/chat/chat.routes.js';
 import { AppError } from '../../src/shared/errors/app-error.js';
 
 describe('Chat Locks, Solicitações e Ciclos de Tarefas (Fase 4.5)', () => {
@@ -17,8 +15,6 @@ describe('Chat Locks, Solicitações e Ciclos de Tarefas (Fase 4.5)', () => {
     let participants = [];
     let periods = [];
     let messages = [];
-    let readReceipts = [];
-    let functionalReadStates = [];
     let auditEvents = [];
     let taskRequests = [];
     let taskAssignments = [];
@@ -335,7 +331,7 @@ describe('Chat Locks, Solicitações e Ciclos de Tarefas (Fase 4.5)', () => {
           messages.push(item);
           return item;
         },
-        async findMany({ where, orderBy, take }) {
+        async findMany({ where, take }) {
           let list = messages.filter((m) => !where.conversationId || m.conversationId === where.conversationId);
           if (take) {
             list = list.slice(0, take);

@@ -156,6 +156,8 @@ model User {
   chatFunctionalReadStates ChatFunctionalReadState[] @relation("UserChatFunctionalReadStates")
   chatLocks                ChatLockState[]           @relation("UserChatLocks")
   chatLockEvents           ChatLockEvent[]           @relation("UserChatLockEvents")
+  chatAttachmentUploads    ChatAttachmentUpload[]    @relation("UserChatAttachmentUploads")
+  chatMessageAttachments   ChatMessageAttachment[]   @relation("UserChatMessageAttachments")
 
   @@index([roleId, isActive])
   @@index([name])
@@ -735,6 +737,16 @@ enum ChatMessageAttachmentOrigin {
   SYSTEM_GENERATED
 }
 
+enum ChatAttachmentUploadStatus {
+  STAGED
+  READY
+  CLAIMED
+  PROMOTED
+  REJECTED
+  FAILED
+  EXPIRED
+}
+
 enum ChatLockReason {
   REQUEST_PENDING
   CYCLE_CLOSED
@@ -769,6 +781,7 @@ model ChatConversation {
   functionalReadStates ChatFunctionalReadState[]
   lockState            ChatLockState?
   lockEvents           ChatLockEvent[]
+  attachmentUploads    ChatAttachmentUpload[]
 
   @@map("chat_conversations")
 }
@@ -836,6 +849,7 @@ model ChatMessage {
   cycle               TaskCycle                 @relation(fields: [cycleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   author              User                      @relation("UserAuthoredChatMessages", fields: [authorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   attachments         ChatMessageAttachment[]
+  attachmentUploads   ChatAttachmentUpload[]
   receiptLastReads    ChatReadReceipt[]         @relation("ReceiptLastReadMessage")
   functionalLastReads ChatFunctionalReadState[] @relation("FunctionalLastReadMessage")
 
@@ -851,20 +865,64 @@ model ChatMessage {
 
 /// Anexo físico exclusivo de mensagens do chat.
 model ChatMessageAttachment {
-  id           String                      @id @default(uuid()) @db.Char(36)
-  messageId    String                      @db.Char(36)
-  originalName String                      @db.VarChar(255)
-  storagePath  String                      @db.VarChar(500)
-  mimeType     String                      @db.VarChar(127)
-  sizeBytes    BigInt                      @db.UnsignedBigInt
-  sha256       String                      @db.Char(64)
-  origin       ChatMessageAttachmentOrigin @default(UPLOAD)
-  createdAt    DateTime                    @default(now()) @db.DateTime(3)
+  id             String                      @id @default(uuid()) @db.Char(36)
+  messageId      String                      @db.Char(36)
+  sourceUploadId String?                     @unique @db.Char(36)
+  uploadedById   String?                     @db.Char(36)
+  position       Int?                        @db.UnsignedSmallInt
+  originalName   String                      @db.VarChar(255)
+  storagePath    String                      @unique @db.VarChar(500)
+  mimeType       String                      @db.VarChar(127)
+  sizeBytes      BigInt                      @db.UnsignedBigInt
+  sha256         String                      @db.Char(64)
+  origin         ChatMessageAttachmentOrigin @default(UPLOAD)
+  createdAt      DateTime                    @default(now()) @db.DateTime(3)
 
-  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  message      ChatMessage           @relation(fields: [messageId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  sourceUpload ChatAttachmentUpload? @relation(fields: [sourceUploadId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  uploadedBy   User?                 @relation("UserChatMessageAttachments", fields: [uploadedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@index([messageId])
+  @@unique([messageId, position])
+  @@index([uploadedById])
   @@map("chat_message_attachments")
+}
+
+/// Upload temporário privado. CLAIMED/PROMOTED são reservados à Fase 5.1.3.
+model ChatAttachmentUpload {
+  id               String                     @id @default(uuid()) @db.Char(36)
+  conversationId   String                     @db.Char(36)
+  uploadedById     String                     @db.Char(36)
+  clientUploadId   String                     @db.Char(36)
+  messageId        String?                    @db.Char(36)
+  originalName     String                     @db.VarChar(255)
+  stagingKey       String                     @unique @db.VarChar(180)
+  targetStorageKey String?                    @unique @db.VarChar(180)
+  mimeType         String                     @db.VarChar(127)
+  extension        String                     @db.VarChar(10)
+  sizeBytes        BigInt                     @db.UnsignedBigInt
+  sha256           String                     @db.Char(64)
+  status           ChatAttachmentUploadStatus @default(STAGED)
+  expiresAt        DateTime                   @db.DateTime(3)
+  claimedAt        DateTime?                  @db.DateTime(3)
+  promotedAt       DateTime?                  @db.DateTime(3)
+  failedAt         DateTime?                  @db.DateTime(3)
+  attemptCount     Int                        @default(0) @db.UnsignedSmallInt
+  failureCode      String?                    @db.VarChar(100)
+  createdAt        DateTime                   @default(now()) @db.DateTime(3)
+  updatedAt        DateTime                   @updatedAt @db.DateTime(3)
+
+  conversation    ChatConversation       @relation(fields: [conversationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  uploadedBy      User                   @relation("UserChatAttachmentUploads", fields: [uploadedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  message         ChatMessage?           @relation(fields: [messageId, conversationId], references: [id, conversationId], onDelete: Restrict, onUpdate: Restrict)
+  finalAttachment ChatMessageAttachment?
+
+  @@unique([conversationId, uploadedById, clientUploadId])
+  @@index([status, expiresAt])
+  @@index([uploadedById, status, expiresAt])
+  @@index([conversationId, status, expiresAt])
+  @@index([messageId, status])
+  @@map("chat_attachment_uploads")
 }
 
 /// Ponteiro de leitura para participantes formais da conversa.

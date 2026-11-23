@@ -1,41 +1,76 @@
 import { createPrismaClient } from '../src/infrastructure/database/prisma.js';
+import {
+  assertChatHomologationDatabase,
+  getChatHomologationDatabaseUrl,
+} from '../testing/chat-homologation-guard.js';
 
-export async function verifyHomologationDatabase(url = 'mysql://root:@127.0.0.1:3306/seaf_chat_homologation') {
-  const client = createPrismaClient(url);
+const expectedChatTables = [
+  'chat_conversations',
+  'chat_participants',
+  'chat_participation_periods',
+  'chat_messages',
+  'chat_message_attachments',
+  'chat_read_receipts',
+  'chat_functional_read_states',
+  'chat_lock_states',
+  'chat_lock_events',
+];
+
+export async function verifyHomologationDatabase(url = process.env.CHAT_HOMOLOGATION_DATABASE_URL) {
+  const databaseUrl = getChatHomologationDatabaseUrl({
+    ...process.env,
+    CHAT_HOMOLOGATION_DATABASE_URL: url,
+  });
+  const client = createPrismaClient(databaseUrl);
 
   try {
-    const [dbInfo] = await client.$queryRawUnsafe('SELECT DATABASE() as current_db, VERSION() as version, @@port as port');
-    
-    if (dbInfo.current_db !== 'seaf_chat_homologation') {
-      throw new Error(`PERIGO: Banco selecionado é "${dbInfo.current_db}", mas deveria ser "seaf_chat_homologation"! Abortando para proteger o ambiente.`);
-    }
-
+    const identity = await assertChatHomologationDatabase(client);
+    const [portRow] = await client.$queryRawUnsafe('SELECT @@port AS port');
     const [tablesRow] = await client.$queryRawUnsafe(
-      "SELECT count(*) as count FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'seaf_chat_homologation'"
+      "SELECT count(*) AS count FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'seaf_chat_homologation'",
     );
-
     const [triggersRow] = await client.$queryRawUnsafe(
-      "SELECT count(*) as count FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = 'seaf_chat_homologation'"
+      "SELECT count(*) AS count FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = 'seaf_chat_homologation'",
     );
-
-    const [chatMessagesRow] = await client.$queryRawUnsafe("SELECT count(*) as count FROM chat_messages");
-    const [tasksRow] = await client.$queryRawUnsafe("SELECT count(*) as count FROM tasks");
-
-    // Confirmação de que o banco operacional seaf_gestao_functional está intocado
-    const [opDbCheck] = await client.$queryRawUnsafe(
-      "SELECT count(*) as count FROM information_schema.tables WHERE table_schema = 'seaf_gestao_functional'"
+    const chatTableRows = await client.$queryRawUnsafe(
+      `SELECT TABLE_NAME AS tableName
+       FROM information_schema.TABLES
+       WHERE TABLE_SCHEMA = 'seaf_chat_homologation'
+         AND TABLE_NAME LIKE 'chat\\_%'
+       ORDER BY TABLE_NAME`,
     );
+    const [migrationsRow] = await client.$queryRawUnsafe('SELECT count(*) AS count FROM _prisma_migrations');
+    const [constraintsRow] = await client.$queryRawUnsafe(
+      `SELECT count(*) AS count
+       FROM information_schema.TABLE_CONSTRAINTS
+       WHERE CONSTRAINT_SCHEMA = 'seaf_chat_homologation'
+         AND TABLE_NAME LIKE 'chat\\_%'`,
+    );
+    const [indexesRow] = await client.$queryRawUnsafe(
+      `SELECT count(DISTINCT TABLE_NAME, INDEX_NAME) AS count
+       FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = 'seaf_chat_homologation'
+         AND TABLE_NAME LIKE 'chat\\_%'`,
+    );
+    const [chatMessagesRow] = await client.$queryRawUnsafe('SELECT count(*) AS count FROM chat_messages');
+    const [tasksRow] = await client.$queryRawUnsafe('SELECT count(*) AS count FROM tasks');
+    const chatTables = chatTableRows.map((row) => row.tableName);
 
     return {
       connected: true,
-      database: dbInfo.current_db,
-      version: dbInfo.version,
-      port: Number(dbInfo.port),
+      database: identity.database,
+      version: identity.version,
+      port: Number(portRow.port),
       tableCount: Number(tablesRow.count),
       triggerCount: Number(triggersRow.count),
+      migrationCount: Number(migrationsRow.count),
+      chatTableCount: chatTables.length,
+      missingChatTables: expectedChatTables.filter((table) => !chatTables.includes(table)),
+      chatConstraintCount: Number(constraintsRow.count),
+      chatIndexCount: Number(indexesRow.count),
       chatMessagesCount: Number(chatMessagesRow.count),
       tasksCount: Number(tasksRow.count),
-      operationalDbIntact: Number(opDbCheck.count) === 42,
+      operationalAccessDenied: identity.operationalAccessDenied,
     };
   } finally {
     await client.$disconnect();
@@ -44,12 +79,12 @@ export async function verifyHomologationDatabase(url = 'mysql://root:@127.0.0.1:
 
 if (process.argv[1]?.endsWith('verify-homologation-db.js')) {
   verifyHomologationDatabase()
-    .then((res) => {
-      console.log('CONFIRMAÇÃO PROGRAMÁTICA DO BANCO DE HOMOLOGAÇÃO:');
-      console.log(JSON.stringify(res, null, 2));
+    .then((result) => {
+      console.info('CONFIRMAÇÃO PROGRAMÁTICA DO BANCO DE HOMOLOGAÇÃO:');
+      console.info(JSON.stringify(result, null, 2));
     })
-    .catch((err) => {
-      console.error('FALHA NA VERIFICAÇÃO:', err);
+    .catch((error) => {
+      console.error('FALHA NA VERIFICAÇÃO:', error.message);
       process.exit(1);
     });
 }
