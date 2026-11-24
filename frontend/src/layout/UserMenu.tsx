@@ -1,5 +1,6 @@
 import { LogOut } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext.tsx';
+import { getRoleLabel } from '../auth/roles.ts';
 
 function getInitials(name?: string) {
   if (!name) return 'U';
@@ -27,7 +28,7 @@ export function UserMenu() {
           {user.name}
         </span>
         <span className="text-[10px] text-slate-300 font-medium truncate leading-tight">
-          {user.role?.label ?? user.role?.code}
+          {getRoleLabel(user.role)}
         </span>
       </div>
 

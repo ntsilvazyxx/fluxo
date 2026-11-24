@@ -21,7 +21,7 @@ describe('Navegação Horizontal — Header e NavHorizontal', () => {
     auth.user = {
       id: 'user-1',
       name: 'Nathan Silva',
-      role: { code: 'ADMIN_MASTER', label: 'Administrador Master' },
+      role: { code: 'ADMIN_MASTER', label: 'Admin Master' },
     };
     auth.request.mockReset().mockResolvedValue({
       ok: true,
@@ -45,7 +45,7 @@ describe('Navegação Horizontal — Header e NavHorizontal', () => {
     expect(screen.getByRole('button', { name: /Notificações/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Sair/i })).toBeInTheDocument();
     expect(screen.getByText('Nathan Silva')).toBeInTheDocument();
-    expect(screen.getByText('Administrador Master')).toBeInTheDocument();
+    expect(screen.getByText('Admin Master')).toBeInTheDocument();
   });
 
   it('renderiza navegação estritamente horizontal sem sidebar vertical', () => {

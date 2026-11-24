@@ -3,6 +3,7 @@ import { ArrowLeft, CalendarClock, Check, Clock3, Download, ExternalLink, Link2,
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.tsx';
+import { getRoleLabel } from '../auth/roles.ts';
 import { TaskLifecyclePanel } from '../tasks/TaskLifecyclePanel.tsx';
 import { ImageGalleryPanel } from '../tasks/ImageGalleryPanel.tsx';
 import { PriorityBadge, StatusBadge } from '../tasks/task-ui.tsx';
@@ -465,7 +466,7 @@ function AssignmentForm({ users, version, onSubmit, busy, policy, isReassignment
     }} className="space-y-3">
       <select aria-label="Responsável" name="userId" required className="field">
         <option value="">Selecione o responsável</option>
-        {users.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.name} · {item.role.label}</option>)}
+        {users.filter((item) => item.isActive).map((item) => <option value={item.id} key={item.id}>{item.name} · {getRoleLabel(item.role)}</option>)}
       </select>
       {policy === 'RUNNING_CLOCK' && (
         <>

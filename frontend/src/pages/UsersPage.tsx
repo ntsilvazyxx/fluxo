@@ -1,9 +1,9 @@
 import { KeyRound, Pencil, Plus, Search, UserCheck, UserX, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthContext.tsx';
+import { getRoleLabel, getSelectableRoles } from '../auth/roles.ts';
 
 type User = { id: string; name: string; email: string; isActive: boolean; role: { code: string; label: string } };
-const roles = ['ADMIN_MASTER', 'SECRETARY', 'MANAGER', 'TECHNICIAN'];
 
 export function UsersPage() {
   const { request, user: actor, logout } = useAuth();
@@ -34,6 +34,7 @@ export function UsersPage() {
   );
   const canCreate = ['ADMIN_MASTER', 'SECRETARY'].includes(actor.role.code);
   const canEdit = actor.role.code === 'ADMIN_MASTER';
+  const selectableRoles = useMemo(() => getSelectableRoles(actor.role.code), [actor.role.code]);
 
   const replaceUser = (updated: User) => setUsers((items) => items.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
   const closeModals = () => { setFormMode(null); setEditing(null); setResetting(null); setChangingStatus(null); };
@@ -142,7 +143,7 @@ export function UsersPage() {
               <p className="truncate text-sm text-muted">{item.email}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className={`text-xs font-semibold ${item.isActive ? 'text-brand-900' : 'text-muted'}`}>{item.role.label} · {item.isActive ? 'Ativo' : 'Inativo'}</span>
+              <span className={`text-xs font-semibold ${item.isActive ? 'text-brand-900' : 'text-muted'}`}>{getRoleLabel(item.role)} · {item.isActive ? 'Ativo' : 'Inativo'}</span>
               {canEdit && <>
                 <button className="grid min-h-11 min-w-11 place-items-center rounded-lg text-brand-700 hover:bg-brand-100" aria-label={`Editar ${item.name}`} onClick={() => { setEditing(item); setFormMode('edit'); setError(''); setMessage(''); }}><Pencil size={17} /></button>
                 <button className="grid min-h-11 min-w-11 place-items-center rounded-lg text-brand-700 hover:bg-brand-100" aria-label={`Redefinir senha de ${item.name}`} onClick={() => { setResetting(item); setError(''); setMessage(''); }}><KeyRound size={17} /></button>
@@ -166,7 +167,8 @@ export function UsersPage() {
                 <label className="block text-sm font-semibold">E-mail<input className="field mt-1" name="email" type="email" required /></label>
                 <label className="block text-sm font-semibold">Senha<input className="field mt-1" name="password" type="password" minLength={12} required /><span className="mt-1 block text-xs font-normal text-muted">Mínimo de 12 caracteres, com maiúscula, minúscula e número.</span></label>
               </>}
-              <label className="block text-sm font-semibold">Perfil<select className="field mt-1" name="roleCode" defaultValue={editing?.role.code ?? 'TECHNICIAN'}>{roles.map((role) => <option key={role} value={role}>{role}</option>)}</select></label>
+              <label htmlFor="user-role-select" className="block text-sm font-semibold">Perfil</label>
+              <select id="user-role-select" aria-label="Perfil" className="field mt-1" name="roleCode" defaultValue={editing?.role.code ?? selectableRoles[0]?.code ?? 'TECHNICIAN'}>{selectableRoles.map((role) => <option key={role.code} value={role.code}>{role.label}</option>)}</select>
               {editing && <label className="block text-sm font-semibold">Justificativa<textarea className="field mt-1" name="reason" minLength={5} required /></label>}
             </div>
             <div className="mt-6 flex justify-end gap-2">

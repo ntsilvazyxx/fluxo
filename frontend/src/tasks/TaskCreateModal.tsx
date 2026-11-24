@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthContext.tsx';
+import { getRoleLabel } from '../auth/roles.ts';
 
 type Team = { id: string; name: string; isActive: boolean };
 type User = {
@@ -493,7 +494,7 @@ export function TaskCreateForm({
             <option value="">Selecione o responsável</option>
             {eligibleUsers(selectedTeamId).map((item) => (
               <option value={item.id} key={item.id}>
-                {item.name} · {item.role.label}
+                {item.name} · {getRoleLabel(item.role)}
               </option>
             ))}
           </select>

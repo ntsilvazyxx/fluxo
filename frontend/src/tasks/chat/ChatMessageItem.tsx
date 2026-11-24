@@ -1,4 +1,5 @@
 import { AlertCircle, Clock, LoaderCircle } from 'lucide-react';
+import { getRoleLabel } from '../../auth/roles.ts';
 import { ChatAttachmentMetaItem } from './ChatAttachmentMeta.tsx';
 import type { ChatMessage, PendingChatMessage } from './chat.types.ts';
 
@@ -8,22 +9,6 @@ function formatMessageTime(isoString: string): string {
     return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   } catch {
     return '';
-  }
-}
-
-function getRoleLabel(roleCode?: string | null): string {
-  if (!roleCode) return '';
-  switch (roleCode) {
-    case 'ADMIN_MASTER':
-      return 'Administrador';
-    case 'SECRETARY':
-      return 'Secretaria';
-    case 'MANAGER':
-      return 'Gestor';
-    case 'TECHNICIAN':
-      return 'Técnico';
-    default:
-      return roleCode;
   }
 }
 

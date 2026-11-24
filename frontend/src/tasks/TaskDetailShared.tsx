@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
+import { getRoleLabel } from '../auth/roles.ts';
 
 export const key = () => crypto.randomUUID();
 
@@ -276,7 +277,7 @@ export function AssignmentForm({
           .filter((item) => item.isActive)
           .map((item) => (
             <option value={item.id} key={item.id}>
-              {item.name} · {item.role.label}
+              {item.name} · {getRoleLabel(item.role)}
             </option>
           ))}
       </select>
