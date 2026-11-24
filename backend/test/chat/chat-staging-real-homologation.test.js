@@ -13,6 +13,7 @@ import { createLocalChatAttachmentStorage } from '../../src/modules/chat/chat-at
 import { createChatAttachmentService } from '../../src/modules/chat/chat-attachment.service.js';
 import { createChatMessageService } from '../../src/modules/chat/chat-message.service.js';
 import { createChatAttachmentReconciliationService } from '../../src/modules/chat/chat-attachment-reconciliation.service.js';
+import { createClamAvChatAttachmentScanner } from '../../src/modules/chat/chat-attachment-scanner.js';
 import {
   assertChatHomologationDatabase,
   getChatHomologationDatabaseUrl,
@@ -1290,6 +1291,110 @@ realHomologation('FASE 5.1.2.1 / 5.1.3 — Homologação Integrada Real do Stagi
         recDbAtt.id,
       );
       assert.ok(dlInfo.stream);
+    });
+  });
+
+  describe('SUITE 9: FASE 5.1.7 — HOMOLOGAÇÃO COM SCANNER CLAMAV 1.5.5 REAL NO MARIADB ISOLADO', () => {
+    let suite9AttachmentService;
+
+    before(async () => {
+      const realScanner = createClamAvChatAttachmentScanner();
+      suite9AttachmentService = createChatAttachmentService({
+        prisma,
+        storage,
+        scanner: realScanner,
+        enabled: true,
+        ttlMinutes: 1440,
+        maxBytes: 20 * 1024 * 1024,
+        userQuotaBytes: 100 * 1024 * 1024,
+        conversationQuotaBytes: 250 * 1024 * 1024,
+      });
+    });
+
+    it('9.1: Ciclo completo com scanner ClamAV real: upload benigno -> varredura real -> stage READY -> publicação -> download com hash exato', async () => {
+      const benignPdf = path.join(tmpTestFiles, 'documento_homologado_real.pdf');
+      const pdfBytes = Buffer.from('%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\nxref\n0 3\n0000000000 65535 f \n0000000010 00000 n \n0000000060 00000 n \ntrailer\n<< /Size 3 /Root 1 0 R >>\nstartxref\n118\n%%EOF\n');
+      await writeFile(benignPdf, pdfBytes);
+      const expectedSha256 = createHash('sha256').update(pdfBytes).digest('hex');
+
+      // 1. Stage com scanner ClamAV real
+      const staged = await suite9AttachmentService.stage(
+        actorTech1,
+        taskId,
+        randomUUID(),
+        {
+          path: benignPdf,
+          originalname: 'documento_homologado_real.pdf',
+          mimetype: 'application/pdf',
+          size: pdfBytes.length,
+        },
+      );
+      assert.equal(staged.status, 'READY');
+      const dbUpload = await prisma.chatAttachmentUpload.findUnique({
+        where: { id: staged.id },
+      });
+      assert.equal(dbUpload.sha256, expectedSha256);
+
+      // 2. Publicação com attachment
+      const msg = await messageService.sendMessage(
+        actorTech1,
+        taskId,
+        {
+          clientMessageId: randomUUID(),
+          content: 'Mensagem homologada com scanner ClamAV 1.5.5 real',
+          stagedAttachmentIds: [staged.id],
+        },
+      );
+      assert.equal(msg.status, 'PUBLISHED');
+      assert.equal(msg.attachments.length, 1);
+      assert.equal(msg.attachments[0].sha256, expectedSha256);
+
+      // 3. Download do anexo e verificação de stream
+      const dl = await messageService.getAttachmentForDownload(
+        actorTech1,
+        taskId,
+        msg.id,
+        msg.attachments[0].id,
+      );
+      assert.ok(dl.stream);
+      assert.equal(dl.attachmentId, msg.attachments[0].id);
+      assert.equal(dl.sizeBytes, pdfBytes.length);
+
+      // 4. Leitura do stream e validação byte a byte
+      const chunks = [];
+      for await (const chunk of dl.stream) {
+        chunks.push(chunk);
+      }
+      const downloadedBuffer = Buffer.concat(chunks);
+      assert.deepEqual(downloadedBuffer, pdfBytes);
+      const downloadedSha256 = createHash('sha256').update(downloadedBuffer).digest('hex');
+      assert.equal(downloadedSha256, expectedSha256);
+    });
+
+    it('9.2: Fail-closed com scanner real: rejeição e integridade garantida', async () => {
+      const brokenScannerService = createChatAttachmentService({
+        prisma,
+        storage,
+        scanner: createClamAvChatAttachmentScanner({ command: 'C:\\caminho\\inexistente\\clamscan.exe' }),
+        enabled: true,
+        ttlMinutes: 1440,
+        maxBytes: 20 * 1024 * 1024,
+        userQuotaBytes: 100 * 1024 * 1024,
+        conversationQuotaBytes: 250 * 1024 * 1024,
+      });
+
+      const benignTxt = path.join(tmpTestFiles, 'teste_fail_closed.txt');
+      await writeFile(benignTxt, Buffer.from('conteudo'));
+
+      await assert.rejects(
+        () => brokenScannerService.stage(
+          actorTech1,
+          taskId,
+          randomUUID(),
+          { path: benignTxt, originalname: 'teste_fail_closed.txt', mimetype: 'text/plain', size: 8 },
+        ),
+        (err) => err.status === 503 && err.code === 'CHAT_ATTACHMENT_SCANNER_UNAVAILABLE',
+      );
     });
   });
 });

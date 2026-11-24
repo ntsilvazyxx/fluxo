@@ -1,37 +1,60 @@
-# SEAF — CHAT FINALIZATION PROGRESS (PROMPT 50 MASTER)
+# SEAF — CHAT FINALIZATION PROGRESS (PROMPT 51 MASTER)
 
 ## 1. Visão Geral
-- **Data de Início:** 24/11/2026
+- **Data:** 24/11/2026
 - **Branch:** `feature/kanban-refactor`
-- **HEAD Anterior:** `9d853c9`
-- **Status Geral:** Concluído com Sucesso — Auditoria Conclusiva, Correções Documentais e Plano Operacional
+- **HEAD Inicial:** `9062fc938defb6a5ab8a9e6e3cb60663842125e2` (`9062fc9`)
+- **Status Geral:** 
+  - **Bloco A (Diagnóstico Inicial):** Concluído e Aprovado.
+  - **Bloco B (Provisionamento ClamAV e Homologação Isolada):** CONCLUÍDO COM SUCESSO ABSOLUTO.
+  - **Bloco C (Implantação Operacional Controlada):** Aguardando Autorização Expressa.
 
 ---
 
-## 2. Rastreamento das 5 Divergências Investigadas
-| Requisito | Contrato Homologado | Relatório Prompt 49 | Situação no Código Real | Classificação | Correção |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Limite Agregado** | 50 MiB (52.428.800 B) | 25 MB | `CHAT_ATTACHMENT_MAX_MESSAGE_BYTES = 50 * 1024 * 1024` em `chat-attachment.constants.ts` e validação individual | Erro exclusivamente documental e de relatório | Documentação atualizada em `chat-frontend-architecture.md` |
-| **Paginação** | `beforeSequence` / `afterSequence` | `cursor` | `fetchTaskMessages` e `useTaskChat.ts` utilizam estritamente `beforeSequence` e `afterSequence`. Campo `cursor` pertence apenas aos metadados do DTO de resposta | Erro exclusivamente documental e de relatório | Documentação atualizada e esclarecida em `chat-frontend-architecture.md` |
-| **Endpoint de Upload** | `/attachments/staged` | `/attachments/upload` | `POST /api/v1/tasks/:taskId/chat/attachments/staged` em `chat.api.ts` e `chat.routes.js` | Erro exclusivamente documental e de relatório | Documentação corrigida em `chat-frontend-architecture.md` |
-| **Campo Multipart** | `attachment` | `file` | `formData.append('attachment', file)` em `chat.api.ts` | Erro exclusivamente documental e de relatório | Documentação corrigida em `chat-frontend-architecture.md` |
-| **Remoção de Staging** | `HTTP 200` com `{ data: { id, status: 'EXPIRED' } }` | `HTTP 204` | `controller.cancelStagedAttachment` retorna HTTP 200 com JSON | Erro exclusivamente documental e de relatório | Documentação corrigida em `chat-frontend-architecture.md` |
+## 2. Diagnóstico Consolidado do Ambiente (Bloco A)
+- **Sistema Operacional:** Microsoft Windows 11 Pro (versão 10.0.26300, 64-bit).
+- **Node.js:** v26.13.0 | **npm:** 11.20.0 | **Prisma:** 7.10.1.
+- **MariaDB:** 10.11.16-MariaDB (XAMPP em `c:\xampp\mysql\bin\mysqld.exe`).
+- **Serviços em Execução:**
+  - Porta 3306: MariaDB (PID 25312)
+  - Porta 3001: Backend SEAF (PID 17060)
+  - Porta 5173: Frontend SEAF Vite (PID 36056)
+- **Espaço em Disco:** > 357 GB livres na unidade C:.
+- **Bancos de Dados:**
+  - `seaf_gestao_functional`: 42 tabelas, 37 triggers, 10 migrations ativas, ausência de `chat_attachment_uploads` (100% intocado).
+  - `seaf_chat_homologation`: 43 tabelas, 37 triggers, 11 migrations ativas, presença de `chat_attachment_uploads`.
 
 ---
 
-## 3. Melhorias e Ajustes Concretos Realizados
-1. **Preservação Defensiva de Mensagens PENDING:**
-   Em `useTaskChat.ts`, durante `refetch()`, mensagens locais em estado `PENDING` são preservadas até que o backend as promova para `PUBLISHED`, evitando desaparecimento transitório da interface do autor.
-2. **Cobertura de Teste para HTTP 202 (Accepted):**
-   Adicionado teste unitário #6 em `useChatMessageSender.test.tsx` comprovando o tratamento de resposta HTTP 202 com status `PENDING`, liberação da fila de anexos (`onAttachmentsConsumed`) e notificação correta de mensagem enviada.
-3. **Diagnóstico do Antivírus:**
-   Inspecionado `chat-attachment-scanner.js`. Verificado que o binário `clamscan` não está instalado no host Windows. O comportamento fail-closed (HTTP 503 `CHAT_ATTACHMENT_SCANNER_UNAVAILABLE`) está homologado e impede qualquer upload desprotegido.
-4. **Elaboração do Plano de Implantação:**
-   Criado `backend/docs/chat-operational-deployment-plan.md` contemplando pré-requisitos, análise detalhada da migration 11, backup coordenado, rollback, ativação em 16 etapas e monitoramento.
+## 3. Provisionamento e Homologação do ClamAV (Bloco B)
+- **Instalação:** ClamAV 1.5.5 Oficial (Cisco Talos, MSI x64) em `C:\Program Files\ClamAV\clamscan.exe`.
+- **Integridade:** SHA-256 verificado (`58876d43d212bef67c104c8d1a1caf59834e03bc3571a7bb418a27d196726d79`).
+- **Base de Dados Oficial:** Atualizada em `C:\ProgramData\ClamAV\db` via `freshclam` (`main.cvd` 89 MB, `daily.cvd` 23.4 MB, `bytecode.cvd` 281 KB).
+- **Adapter de Varredura:** `backend/src/modules/chat/chat-attachment-scanner.js` adaptado para resolução automática no Windows (`C:\Program Files\ClamAV\clamscan.exe` e `--database=C:\ProgramData\ClamAV\db`).
+- **Testes Unitários do Scanner:** 5/5 aprovados (`chat-attachment-scanner.test.js`).
+- **Testes Reais do Scanner ClamAV:** 5/5 aprovados (`chat-scanner-real-homologation.test.js` - detecção de arquivos benignos e fail-closed para caminhos/bases corrompidas).
+- **Suíte Real MariaDB Isolado:** 58/58 aprovados (Suítes 1 a 9 em `test:chat:real`, incluindo ciclo completo com varredura real do ClamAV 1.5.5).
+- **Homologação em Navegador Real:** Ciclo completo de 13 passos executado via Playwright / Chrome com 100% de sucesso e conferência criptográfica SHA-256 byte a byte idêntica (`b7edbcb7502c8981a643a017e1334a6ced3fb2e729f370f1092da7cc17f9e704`).
+- **Evidências Visuais:** 9 screenshots adicionais gerados em `artifacts/screenshots` (`54_homolog_01_login.png` a `62_homolog_12_download_complete.png`).
 
 ---
 
-## 4. Preservação Absoluta
-- `seaf_gestao_functional`: 42 tabelas, 37 triggers, zero escritas.
-- `LoginPage.tsx` e `login-bg.jpg`: Preservados e rigorosamente fora do commit.
+## 4. Regressão Geral do Sistema
+- **Frontend Vitest:** 237 testes aprovados (26 suítes).
+- **Frontend Build de Produção:** Concluído em 571ms sem erros.
+- **Backend Lint:** ESLint limpo (0 erros/avisos).
+- **Backend Prisma:** Schema validado.
+- **Backend Safe Tests:** 564 testes aprovados (124 suítes).
+- **Backend Chat Safe Tests:** 336 testes aprovados.
+
+---
+
+## 5. Preservação Estrita e Controle Git
+- `frontend/src/pages/LoginPage.tsx` e `frontend/src/assets/login-bg.jpg`: Preservados integralmente e mantidos rigorosamente fora do commit.
+- Banco operacional `seaf_gestao_functional`: Nenhuma escrita, migração ou teste realizado (zero mutações).
 - `git push`: Não executado.
+
+---
+
+## 6. Próximo Passo
+Submeter o relatório conclusivo do Bloco B e a solicitação formal de autorização para o Bloco C (Implantação Operacional Controlada).

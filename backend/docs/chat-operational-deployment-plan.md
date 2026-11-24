@@ -17,7 +17,7 @@
 | **MariaDB** | 10.11 LTS | Banco operacional: `seaf_gestao_functional` (42 tabelas, 37 triggers). |
 | **Prisma ORM** | Prisma 7 | Schemas validados (`npx prisma validate`). |
 | **Storage Privado** | Diretório local ou volume dedicado com permissões restritas | `storage/chat-attachments/` (subdiretórios: `staging/`, `objects/`, `quarantine/`). |
-| **Antivírus (ClamAV)** | Binário `clamscan` acessível via PATH ou daemon `clamd` | **IMPEDIMENTO OPERACIONAL:** Binário `clamscan` ausente no ambiente Windows local; obrigatório provisionar antes da ativação dos anexos. |
+| **Antivírus (ClamAV)** | Binário `clamscan` acessível via PATH ou caminho absoluto configurado | **PROVISIONADO E HOMOLOGADO (Fase 5.1.7 - Bloco B):** ClamAV 1.5.5 oficial (Cisco Talos) instalado em `C:\Program Files\ClamAV\clamscan.exe` com assinaturas atualizadas em `C:\ProgramData\ClamAV\db` (`main.cvd`, `daily.cvd`, `bytecode.cvd`). Suíte de 5 testes unitários e homologação real no MariaDB e navegador aprovadas com 100% de sucesso. |
 | **Variáveis de Ambiente** | Configurações mínimas em `.env` | Listadas na Seção 2 abaixo. |
 
 ---
