@@ -1,24 +1,24 @@
-# Plano Técnico de Implantação Operacional do Módulo de Chat — SEAF
-## Preparação Documental, Migrações, Segurança e Ativação Gradual (Fase 5.1.7 / Prompt 50 Master)
+# Relatório de Implantação e Plano Operacional do Módulo de Chat — SEAF
+## Conclusão da Implantação Controlada, Migrações, Segurança e Ativação Operacional (Fase 5.1.7 / Prompt 51 Master)
 
 ---
 
-> [!IMPORTANT]
-> **ESTE DOCUMENTO É ESTRITAMENTE DE PLANEJAMENTO TÉCNICO.**
-> Nenhuma operação de deploy, execução de migrations operacionais, alteração de banco de produção ou ativação de workers está autorizada ou foi executada neste ciclo.
+> [!NOTE]
+> **STATUS OPERACIONAL (BLOCO C CONCLUÍDO COM SUCESSO):**
+> A migration `20261123010000_add_chat_attachment_staging` foi aplicada no banco operacional `seaf_gestao_functional` após backup integral e teste em sandbox descartável. O storage privado foi inicializado e o scanner ClamAV 1.5.5 oficial está ativo e homologado.
 
 ---
 
-### 1. Inventário de Pré-Requisitos e Ambiente
+### 1. Inventário de Pré-Requisitos e Ambiente Operacional
 
-| Componente | Versão / Configuração Requerida | Estado Atual / Observações |
+| Componente | Versão / Configuração Requerida | Estado Operacional Comprovado |
 | :--- | :--- | :--- |
-| **Node.js** | $\ge 26.0.0$ (Atualmente: v26.13.0) | Homologado e compatível com ES Modules. |
-| **MariaDB** | 10.11 LTS | Banco operacional: `seaf_gestao_functional` (42 tabelas, 37 triggers). |
-| **Prisma ORM** | Prisma 7 | Schemas validados (`npx prisma validate`). |
-| **Storage Privado** | Diretório local ou volume dedicado com permissões restritas | `storage/chat-attachments/` (subdiretórios: `staging/`, `objects/`, `quarantine/`). |
-| **Antivírus (ClamAV)** | Binário `clamscan` acessível via PATH ou caminho absoluto configurado | **PROVISIONADO E HOMOLOGADO (Fase 5.1.7 - Bloco B):** ClamAV 1.5.5 oficial (Cisco Talos) instalado em `C:\Program Files\ClamAV\clamscan.exe` com assinaturas atualizadas em `C:\ProgramData\ClamAV\db` (`main.cvd`, `daily.cvd`, `bytecode.cvd`). Suíte de 5 testes unitários e homologação real no MariaDB e navegador aprovadas com 100% de sucesso. |
-| **Variáveis de Ambiente** | Configurações mínimas em `.env` | Listadas na Seção 2 abaixo. |
+| **Node.js** | $\ge 26.0.0$ (Atualmente: v26.13.0) | Ativo na porta 3001 (PID 15268). |
+| **MariaDB** | 10.11 LTS | Banco operacional: `seaf_gestao_functional` (**43 tabelas**, 37 triggers, 11 migrações ativas). |
+| **Prisma ORM** | Prisma 7 | Schemas validados e migration aplicada via `prisma migrate deploy`. |
+| **Storage Privado** | Diretório local ou volume dedicado com permissões restritas | `backend/storage/chat-attachments/` (`staging/`, `objects/`, `quarantine/`). |
+| **Antivírus (ClamAV)** | Binário `clamscan` acessível via PATH ou caminho absoluto configurado | **PROVISIONADO E ATIVO:** ClamAV 1.5.5 oficial (Cisco Talos) em `C:\Program Files\ClamAV\clamscan.exe` com assinaturas em `C:\ProgramData\ClamAV\db`. |
+| **Variáveis de Ambiente** | Configurações operacionais | `CHAT_ATTACHMENT_STORAGE_ENABLED=1`, `CHAT_ATTACHMENT_STORAGE_PATH=backend/storage/chat-attachments`. |
 
 ---
 
