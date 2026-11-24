@@ -361,19 +361,19 @@ describe('Integração do Modal de Detalhes no Kanban (Fase 4)', () => {
     expect(cardArticle).toHaveClass('bg-sky-100/80');
   });
 
-  it('10. Funcionamento na visualização Minhas Tarefas (/minhas-tarefas)', async () => {
+  it('10. Funcionamento do modal no Kanban para perfil TECHNICIAN', async () => {
     auth.user = { id: 'self', role: { code: 'TECHNICIAN' } };
 
     render(
-      <MemoryRouter initialEntries={['/minhas-tarefas']}>
+      <MemoryRouter initialEntries={['/kanban']}>
         <KanbanPage />
       </MemoryRouter>,
     );
 
-    await screen.findByRole('heading', { name: 'Minhas tarefas' });
+    await screen.findByRole('heading', { name: 'Kanban de tarefas' });
     await screen.findByRole('heading', { name: 'Entrega Pessoal 1' });
 
-    // Clica no cartão na visualização de Minhas Tarefas
+    // Clica no cartão no Kanban
     fireEvent.click(screen.getByRole('link', { name: 'Abrir tarefa #1: Entrega Pessoal 1' }));
 
     // Modal abre normalmente

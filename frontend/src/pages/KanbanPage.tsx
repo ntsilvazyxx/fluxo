@@ -31,7 +31,7 @@ import {
   X,
 } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.tsx';
 import { EmptyTasks, TaskCard } from '../tasks/task-ui.tsx';
 import { useTasks } from '../tasks/useTasks.ts';
@@ -43,8 +43,6 @@ import { TaskChatPanel } from '../tasks/chat/TaskChatPanel.tsx';
 
 export function KanbanPage() {
   const { request, user, features } = useAuth();
-  const location = useLocation();
-  const isMyTasksRoute = location.pathname.startsWith('/minhas-tarefas');
   const managerial = ['ADMIN_MASTER', 'SECRETARY', 'MANAGER'].includes(user.role.code);
   const canCreateTask =
     user.role.code === 'ADMIN_MASTER' ? features?.adminTaskCreation === true : managerial;
@@ -95,12 +93,12 @@ export function KanbanPage() {
 
   const personal = useTasks(taskQuery('/my-tasks', filters, pageNumber(params.get('personalPage'))));
   const operational = useTasks(
-    !isMyTasksRoute && managerial
+    managerial
       ? taskQuery('/kanban', filters, pageNumber(params.get('teamPage')))
       : null,
   );
   const completedOperational = useTasks(
-    !isMyTasksRoute && managerial
+    managerial
       ? taskQuery('/task-history', { ...filters, status: 'COMPLETED' }, pageNumber(params.get('completedPage')))
       : null,
   );
@@ -172,9 +170,7 @@ export function KanbanPage() {
   const search = params.toString() ? `?${params}` : '';
 
   // Combina e deduplica as tarefas autorizadas
-  const rawTasks = isMyTasksRoute
-    ? (personal.tasks || []).filter((task: any) => task.cycle?.assignment?.userId === user.id)
-    : managerial
+  const rawTasks = managerial
     ? [
         ...(operational.tasks || []),
         ...(completedOperational?.tasks || []),
@@ -217,13 +213,13 @@ export function KanbanPage() {
 
   const isSearchActive = Boolean(filters.search && filters.search.trim());
   const pendingSearchResults =
-    isSearchActive && managerial && !isMyTasksRoute
+    isSearchActive && managerial
       ? allTasks.filter((task) => task.cycle?.status === 'PENDING')
       : [];
 
   const isLoading =
     personal.loading ||
-    (managerial && !isMyTasksRoute && (operational.loading || completedOperational?.loading));
+    (managerial && (operational.loading || completedOperational?.loading));
   const errorMessage = personal.error || operational.error || completedOperational?.error;
   const reloadAll = () => {
     personal.reload();
@@ -366,19 +362,13 @@ export function KanbanPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-sm font-bold text-brand-700">
-            {isMyTasksRoute
-              ? 'Execução pessoal'
-              : managerial
-              ? 'Acompanhamento e execução'
-              : 'Acompanhamento e execução pessoal'}
+            {managerial ? 'Acompanhamento e execução' : 'Acompanhamento e execução pessoal'}
           </p>
           <h1 className="mt-1 text-3xl font-extrabold">
-            {isMyTasksRoute ? 'Minhas tarefas' : 'Kanban de tarefas'}
+            Kanban de tarefas
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-muted">
-            {isMyTasksRoute
-              ? 'Tarefas sob sua responsabilidade direta atual. Abra um cartão para responder ou executar.'
-              : managerial
+            {managerial
               ? 'Acompanhamento operacional das tarefas organizadas por fluxo de execução.'
               : 'Tarefas e entregas autorizadas organizadas por fluxo de execução.'}
           </p>
@@ -438,7 +428,7 @@ export function KanbanPage() {
         </div>
         {expanded && (
           <div id="kanban-advanced-filters" className="mt-3 grid gap-3 border-t border-border pt-3 sm:grid-cols-2 xl:grid-cols-3">
-            {managerial && !isMyTasksRoute && (
+            {managerial && (
               <>
                 <FilterSelect label="Equipe" name="teamId" value={filters.teamId} change={change}>
                   <option value="">Todas as equipes</option>
@@ -594,7 +584,7 @@ export function KanbanPage() {
                             key={task.id}
                             task={task}
                             compact
-                            personal={isMyTasksRoute || !managerial}
+                            personal={!managerial}
                             search={search}
                             color={colors[task.id]}
                             onColorChange={(newColor: string | null) => void setColor(task.id, newColor)}
@@ -620,7 +610,7 @@ export function KanbanPage() {
               <TaskCard
                 task={activeTask}
                 compact
-                personal={isMyTasksRoute || !managerial}
+                personal={!managerial}
                 search={search}
                 color={colors[activeTask.id]}
               />
@@ -630,9 +620,9 @@ export function KanbanPage() {
       </DndContext>
 
       <PageControls
-        source={managerial && !isMyTasksRoute ? operational : personal}
-        label={managerial && !isMyTasksRoute ? 'Fluxo das equipes' : 'Tarefas pessoais'}
-        onPage={(page) => pagination(managerial && !isMyTasksRoute ? 'teamPage' : 'personalPage', page)}
+        source={managerial ? operational : personal}
+        label={managerial ? 'Fluxo das equipes' : 'Tarefas pessoais'}
+        onPage={(page) => pagination(managerial ? 'teamPage' : 'personalPage', page)}
       />
       <p className="mt-2 text-xs text-muted">
         Contagens por página. Arraste pela alça para organizar ou transicionar. Cartões abrem detalhes.

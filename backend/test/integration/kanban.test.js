@@ -62,7 +62,9 @@ describe('Kanban unificado - escopo pessoal e filtros no MariaDB', { skip: proce
     const mine = await call('technician', 'get', `/my-tasks?search=${data.run}&pageSize=100`);
     assert.equal(mine.status, 200);
     assert.deepEqual(mine.body.data.tasks.map((task) => task.id).sort(), [tasks.waiting.id, tasks.progress.id, tasks.completed.id].sort());
-    assert.equal((await call('technician', 'get', '/kanban')).status, 403);
+    const kanban = await call('technician', 'get', `/kanban?search=${data.run}&pageSize=100`);
+    assert.equal(kanban.status, 200);
+    assert.deepEqual(kanban.body.data.tasks.map((task) => task.id).sort(), [tasks.waiting.id, tasks.progress.id].sort());
     assert.equal((await call('technician', 'get', `/tasks/${tasks.pending.id}`)).status, 404);
     const admin = await call('admin', 'get', `/my-tasks?search=${data.run}&pageSize=100`);
     assert.deepEqual(admin.body.data.tasks.map((task) => task.id), [tasks.admin.id]);

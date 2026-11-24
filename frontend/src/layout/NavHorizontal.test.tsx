@@ -85,7 +85,7 @@ describe('Navegação Horizontal — Header e NavHorizontal', () => {
   });
 
   describe('RBAC e opções por perfil', () => {
-    it('TECHNICIAN visualiza exclusivamente Kanban, Minhas Tarefas, Arquivadas e Equipes', () => {
+    it('TECHNICIAN visualiza exclusivamente Kanban, Arquivadas e Equipes (sem Minhas Tarefas, sem Usuários, sem Dashboard e sem Relatórios)', () => {
       auth.user = {
         id: 'tech-1',
         name: 'Técnico Silva',
@@ -95,10 +95,10 @@ describe('Navegação Horizontal — Header e NavHorizontal', () => {
 
       const links = screen.getAllByRole('link').map((node) => node.textContent?.trim());
       expect(links).toContain('Kanban');
-      expect(links).toContain('Minhas Tarefas');
       expect(links).toContain('Arquivadas');
       expect(links).toContain('Equipes');
 
+      expect(links).not.toContain('Minhas Tarefas');
       expect(links).not.toContain('Dashboard');
       expect(links).not.toContain('Relatórios');
       expect(links).not.toContain('Usuários');

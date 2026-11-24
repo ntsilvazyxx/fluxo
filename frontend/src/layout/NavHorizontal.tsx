@@ -1,4 +1,4 @@
-import { Archive, Columns3, ListTodo, Users, UsersRound } from 'lucide-react';
+import { Archive, Columns3, Users, UsersRound } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext.tsx';
 import { NavItem } from './NavItem.tsx';
 
@@ -6,12 +6,10 @@ export function NavHorizontal() {
   const { user } = useAuth();
   const roleCode = user?.role?.code;
 
-  const isTechnician = roleCode === 'TECHNICIAN';
   const canManageUsers = ['ADMIN_MASTER', 'SECRETARY'].includes(roleCode);
 
   const items = [
     { to: '/kanban', label: 'Kanban', icon: Columns3, end: true },
-    ...(isTechnician ? [{ to: '/minhas-tarefas', label: 'Minhas Tarefas', icon: ListTodo }] : []),
     { to: '/historico', label: 'Arquivadas', icon: Archive },
     ...(canManageUsers ? [{ to: '/usuarios', label: 'Usuários', icon: Users }] : []),
     { to: '/equipes', label: 'Equipes', icon: UsersRound },

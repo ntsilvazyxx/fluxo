@@ -31,6 +31,11 @@ function LegacyTask() {
   return <Navigate to={`/kanban/tarefas/${id}${location.search}${location.hash}`} replace />;
 }
 
+function LegacyMyTasks() {
+  const location = useLocation();
+  return <Navigate to={`/kanban${location.search}${location.hash}`} replace />;
+}
+
 function TaskCreation({ children }) {
   const { user, features } = useAuth();
   const allowed = user.role.code === 'ADMIN_MASTER' ? features.adminTaskCreation : ['SECRETARY', 'MANAGER'].includes(user.role.code);
@@ -51,7 +56,7 @@ function AppRoutes() {
       <Route path="relatorios" element={<Roles allowed={analysts}><LoadingPage><ReportsPage /></LoadingPage></Roles>} />
       <Route path="kanban" element={<KanbanPage />} />
       <Route path="kanban/tarefas/:id" element={<TaskDetailPage />} />
-      <Route path="minhas-tarefas" element={<Roles allowed={['TECHNICIAN']}><KanbanPage /></Roles>} />
+      <Route path="minhas-tarefas" element={<LegacyMyTasks />} />
       <Route path="historico" element={<TaskHistoryPage />} />
       <Route path="tarefas/nova" element={<TaskCreation><TaskFormPage /></TaskCreation>} />
       <Route path="tarefas/:id" element={<LegacyTask />} />

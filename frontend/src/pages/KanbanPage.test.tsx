@@ -129,12 +129,12 @@ describe('Kanban Padronizado (Fase 2)', () => {
     ).toBe(true);
   });
 
-  it('TECHNICIAN na rota /minhas-tarefas visualiza título específico e escopo de responsabilidade direta', async () => {
+  it('TECHNICIAN no Kanban visualiza título padronizado e escopo de responsabilidade direta', async () => {
     auth.user = { id: 'self', role: { code: 'TECHNICIAN' } };
-    open('/minhas-tarefas');
+    open('/kanban');
 
-    await screen.findByRole('heading', { name: 'Minhas tarefas' });
-    expect(screen.getByText('Tarefas sob sua responsabilidade direta atual. Abra um cartão para responder ou executar.')).toBeInTheDocument();
+    await screen.findByRole('heading', { name: 'Kanban de tarefas' });
+    expect(screen.getByText('Tarefas e entregas autorizadas organizadas por fluxo de execução.')).toBeInTheDocument();
 
     const headings = screen.getAllByRole('heading', { level: 2 }).map((node) => node.textContent);
     expect(headings).toEqual([
