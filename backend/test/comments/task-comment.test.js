@@ -355,6 +355,27 @@ describe('chat de comentários e atividades (TaskComment)', () => {
     });
     assert.equal(tooLong.success, false);
   });
+
+  it('9. rota POST /tasks/:id/comments responde com 410 COMMENT_CREATION_RETIRED direcionando para o Chat', async () => {
+    const { createTaskCommentRouter } = await import(
+      '../../src/modules/comments/comment.routes.js'
+    );
+    const router = createTaskCommentRouter({ prisma: makeMockPrisma(), config: {} });
+    assert.ok(router);
+
+    // Encontra o handler da rota POST /:id/comments
+    const postLayer = router.stack.find((l) => l.route?.path === '/:id/comments' && l.route?.methods?.post);
+    assert.ok(postLayer, 'A rota POST /:id/comments deve estar registrada no router');
+
+    let capturedError;
+    const next = (err) => { capturedError = err; };
+    postLayer.route.stack[0].handle({}, {}, next);
+
+    assert.ok(capturedError, 'Deve acionar o middleware com AppError');
+    assert.equal(capturedError.status, 410);
+    assert.equal(capturedError.code, 'COMMENT_CREATION_RETIRED');
+    assert.match(capturedError.message, /módulo de Chat/i);
+  });
 });
 
 

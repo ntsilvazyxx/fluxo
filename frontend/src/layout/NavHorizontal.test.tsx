@@ -102,6 +102,7 @@ describe('Navegação Horizontal — Header e NavHorizontal', () => {
       expect(links).not.toContain('Dashboard');
       expect(links).not.toContain('Relatórios');
       expect(links).not.toContain('Usuários');
+      expect(links).not.toContain('Calendário');
     });
 
     it('MANAGER visualiza Kanban, Arquivadas e Equipes (sem Minhas Tarefas, sem Usuários, sem Dashboard e sem Relatórios)', () => {

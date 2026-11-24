@@ -164,30 +164,14 @@ describe('Modal de Detalhes da Tarefa (TaskDetailModal)', () => {
     expect(screen.getByText(/Linha 2 com detalhes adicionais/)).toBeInTheDocument();
   });
 
-  it('apresenta a seção Comentários e Atividades estruturada com linha do tempo e área de input', async () => {
+  it('não renderiza mais a seção legada de Comentários e Atividades, preservando o layout limpo', async () => {
     render(<TaskDetailModal taskId="task-modal-1" onClose={() => {}} />);
 
     await screen.findByRole('heading', { name: 'Migração de Servidores e Banco de Dados' });
 
-    // Seção Comentários e Atividades
-    expect(screen.getByRole('region', { name: 'Comentários e Atividades' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Comentários e Atividades' })).toBeInTheDocument();
-
-    // Comentário diferenciado de evento automático do sistema e notas de execução
-    expect(screen.getByText('Comentário')).toBeInTheDocument();
-    expect(screen.getByText('Comentário sobre o andamento da migração.')).toBeInTheDocument();
-
-    expect(screen.getByText('Nota de execução')).toBeInTheDocument();
-    expect(screen.getByText('Iniciando o checklist inicial de conectividade.')).toBeInTheDocument();
-
-    expect(screen.getAllByText('Evento do sistema').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/Tarefa criada e atribuída/)).toBeInTheDocument();
-
-    // Área funcional para envio de comentários na Fase 5
-    const commentInput = screen.getByPlaceholderText('Escreva seu comentário...');
-    expect(commentInput).not.toBeDisabled();
-    expect(screen.getByRole('button', { name: /Enviar/i })).toBeDisabled(); // Desabilitado enquanto vazio
-    expect(screen.getByText(/caracteres restantes/i)).toBeInTheDocument();
+    // Seção Comentários e Atividades foi descontinuada em favor do Chat exclusivo
+    expect(screen.queryByRole('region', { name: 'Comentários e Atividades' })).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Escreva seu comentário...')).not.toBeInTheDocument();
   });
 
   it('exibe resultado da execução em destaque quando a tarefa está concluída', async () => {

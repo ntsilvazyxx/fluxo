@@ -26,7 +26,6 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthContext.tsx';
 import { ImageGalleryPanel } from './ImageGalleryPanel.tsx';
-import { TaskActivitiesTimeline } from './TaskActivitiesTimeline.tsx';
 import { TaskChatPanel } from './chat/TaskChatPanel.tsx';
 import {
   Action,
@@ -1110,9 +1109,6 @@ export function TaskDetailModal({
 
               {/* Histórico de solicitações e prazos */}
               <RequestHistory cycle={cycle} />
-
-              {/* E. COMENTÁRIOS E ATIVIDADES */}
-              <TaskActivitiesTimeline task={task} />
             </>
           )}
         </div>

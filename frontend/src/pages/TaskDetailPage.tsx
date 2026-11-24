@@ -6,7 +6,6 @@ import { useAuth } from '../auth/AuthContext.tsx';
 import { TaskLifecyclePanel } from '../tasks/TaskLifecyclePanel.tsx';
 import { ImageGalleryPanel } from '../tasks/ImageGalleryPanel.tsx';
 import { PriorityBadge, StatusBadge } from '../tasks/task-ui.tsx';
-import { TaskActivitiesTimeline } from '../tasks/TaskActivitiesTimeline.tsx';
 
 const key = () => crypto.randomUUID();
 const duration = (value?: number) => {
@@ -140,9 +139,6 @@ export function TaskDetailPage() {
         {isCreator && ['PENDING', 'AWAITING_ACCEPTANCE', 'IN_PROGRESS'].includes(currentCycle.status) && <Action title="Cancelar tarefa"><ReasonAction label="Cancelar definitivamente" danger busy={busy} onSubmit={(reason) => mutate(`/tasks/${id}/cancel`, { expectedVersion: currentCycle.version, reason })} /></Action>}
       </div>
       <RequestHistory cycle={cycle} />
-      <div className="mt-7">
-        <TaskActivitiesTimeline task={task} />
-      </div>
     </div>
   );
 }
