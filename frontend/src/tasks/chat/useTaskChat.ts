@@ -136,7 +136,17 @@ export function useTaskChat(taskId: string, enabled = true): UseTaskChatResult {
       const msgsResponse = await fetchTaskMessages(request, taskId, { limit: 50 });
       if (sequenceRef.current !== currentSeq) return;
 
-      setMessages(sortMessagesBySequence(msgsResponse.items));
+      setMessages((prev) => {
+        // Preserva mensagens locais PENDING ainda não reconciliadas pelo backend
+        const pendingToKeep = prev.filter(
+          (m) =>
+            m.status === 'PENDING' &&
+            !msgsResponse.items.some(
+              (pub) => pub.id === m.id || (m.clientMessageId && pub.clientMessageId === m.clientMessageId),
+            ),
+        );
+        return sortMessagesBySequence([...msgsResponse.items, ...pendingToKeep]);
+      });
       setPagination(msgsResponse.pagination);
     } catch (err) {
       if (sequenceRef.current !== currentSeq) return;

@@ -232,4 +232,58 @@ describe('FASE 5.1.7.4 — useChatMessageSender (Publicação com Anexos e Idemp
     expect(capturedIds[0]).toBe(capturedIds[1]); // Mesmo UUID preservado
     expect(result.current.status).toBe('IDLE');
   });
+
+  it('6. Trata resposta HTTP 202 (Accepted) com status PENDING', async () => {
+    let capturedPayload: any = null;
+    const onAttachmentsConsumed = vi.fn();
+    const onMessageSent = vi.fn();
+
+    authMock.request.mockImplementation(async (url: string, opts: any) => {
+      capturedPayload = JSON.parse(opts.body);
+      return {
+        ok: true,
+        status: 202,
+        json: async () => ({
+          data: {
+            id: 'msg-pending',
+            clientMessageId: capturedPayload.clientMessageId,
+            content: capturedPayload.content,
+            status: 'PENDING',
+            attachments: [{ id: 'att-pending', status: 'PENDING' }],
+          },
+        }),
+      };
+    });
+
+    const { result } = renderHook(() =>
+      useChatMessageSender({
+        taskId: 'task-1',
+        canSend: true,
+        isLocked: false,
+        readyAttachmentIds: ['upload-staged-1'],
+        hasPendingUploads: false,
+        onAttachmentsConsumed,
+        onMessageSent,
+      }),
+    );
+
+    act(() => {
+      result.current.setText('Mensagem com anexo em processamento assíncrono');
+    });
+
+    await act(async () => {
+      await result.current.send();
+    });
+
+    expect(capturedPayload.stagedAttachmentIds).toEqual(['upload-staged-1']);
+    expect(onAttachmentsConsumed).toHaveBeenCalledWith(['upload-staged-1']);
+    expect(onMessageSent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'msg-pending',
+        status: 'PENDING',
+      }),
+    );
+    expect(result.current.text).toBe('');
+    expect(result.current.status).toBe('IDLE');
+  });
 });
