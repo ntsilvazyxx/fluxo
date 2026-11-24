@@ -5,6 +5,7 @@ import {
   CircleCheck,
   Clock3,
   GripVertical,
+  MessageSquare,
   MoreHorizontal,
   Palette,
   RotateCcw,
@@ -66,6 +67,7 @@ export function TaskCard({
   color,
   onColorChange,
   onSelect,
+  onOpenChat,
   dragHandleProps,
 }: {
   task: any;
@@ -75,6 +77,7 @@ export function TaskCard({
   color?: string;
   onColorChange?: (color: string | null) => void;
   onSelect?: (task: any, trigger?: HTMLElement) => void;
+  onOpenChat?: (task: any) => void;
   dragHandleProps?: Record<string, any>;
 }) {
   const c = task.cycle;
@@ -283,8 +286,8 @@ export function TaskCard({
         <h3 className={`mt-2 line-clamp-2 text-sm font-bold leading-5 ${colorConfig.textClass}`} title={c.title}>
           {c.title}
         </h3>
-        <p className={`mt-1 truncate text-xs ${colorConfig.mutedClass}`} title={task.team.name}>
-          {task.team.name}
+        <p className={`mt-1 truncate text-xs ${colorConfig.mutedClass}`} title={task.team?.name ?? 'Sem equipe'}>
+          {task.team?.name ?? 'Sem equipe'}
         </p>
         <div className={`mt-3 space-y-1.5 text-xs ${colorConfig.mutedClass}`}>
           <p className="flex min-w-0 items-center gap-1.5">
@@ -457,6 +460,24 @@ export function TaskCard({
                 }}
               >
                 Resumo da tarefa
+              </button>
+              <button
+                type="button"
+                aria-label={`Chat da tarefa #${task.publicNumber}`}
+                className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold hover:bg-brand-100 transition-colors"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (menu.current) menu.current.open = false;
+                  if (onOpenChat) {
+                    onOpenChat(task);
+                  } else if (onSelect) {
+                    onSelect(task);
+                  }
+                }}
+              >
+                <MessageSquare size={16} className="text-brand-700 shrink-0" />
+                <span>Chat da tarefa</span>
               </button>
               {personal && ['AWAITING_ACCEPTANCE', 'IN_PROGRESS'].includes(c.status) && (
                 <Link

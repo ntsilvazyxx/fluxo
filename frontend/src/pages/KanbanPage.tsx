@@ -39,6 +39,7 @@ import { useTaskColors } from '../tasks/useTaskColors.ts';
 import { kanbanColumns, kanbanFilterKeys, taskQuery } from '../tasks/kanban.ts';
 import { TaskDetailModal } from '../tasks/TaskDetailModal.tsx';
 import { TaskCreateModal } from '../tasks/TaskCreateModal.tsx';
+import { TaskChatPanel } from '../tasks/chat/TaskChatPanel.tsx';
 
 export function KanbanPage() {
   const { request, user, features } = useAuth();
@@ -52,6 +53,7 @@ export function KanbanPage() {
   const [expanded, setExpanded] = useState(false);
   const [options, setOptions] = useState({ teams: [], users: [], error: '' });
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [chatTask, setChatTask] = useState<any>(null);
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
   const createTaskTriggerRef = useRef<HTMLElement | null>(null);
   const lastFocusedCardRef = useRef<HTMLElement | null>(null);
@@ -599,6 +601,7 @@ export function KanbanPage() {
                             onSelect={(selected: any, trigger?: HTMLElement) =>
                               handleOpenTask(selected.id, trigger)
                             }
+                            onOpenChat={(t: any) => setChatTask(t)}
                           />
                         ))}
                         {items.length === 0 && <EmptyTasks />}
@@ -642,6 +645,17 @@ export function KanbanPage() {
           onClose={handleCloseTask}
           onTaskUpdated={reloadAll}
           triggerElement={lastFocusedCardRef.current}
+        />
+      )}
+
+      {/* Painel do Chat da Tarefa (abertura direta pelo cartão do Kanban) */}
+      {chatTask && (
+        <TaskChatPanel
+          isOpen={Boolean(chatTask)}
+          onClose={() => setChatTask(null)}
+          taskId={chatTask.id}
+          taskPublicNumber={chatTask.publicNumber}
+          taskTitle={chatTask.cycle?.title || chatTask.title}
         />
       )}
 
@@ -830,6 +844,7 @@ function SortableTaskCard({
   color,
   onColorChange,
   onSelect,
+  onOpenChat,
 }: any) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
@@ -858,6 +873,7 @@ function SortableTaskCard({
         color={color}
         onColorChange={onColorChange}
         onSelect={onSelect}
+        onOpenChat={onOpenChat}
         dragHandleProps={{ ...attributes, ...listeners }}
       />
     </div>

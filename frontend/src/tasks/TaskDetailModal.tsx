@@ -12,6 +12,7 @@ import {
   ExternalLink,
   Link2,
   Loader2,
+  MessageSquare,
   MoreHorizontal,
   Pencil,
   RotateCcw,
@@ -26,6 +27,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthContext.tsx';
 import { ImageGalleryPanel } from './ImageGalleryPanel.tsx';
 import { TaskActivitiesTimeline } from './TaskActivitiesTimeline.tsx';
+import { TaskChatPanel } from './chat/TaskChatPanel.tsx';
 import {
   Action,
   AssignmentForm,
@@ -107,6 +109,10 @@ export function TaskDetailModal({
 
   const [isRequestOpen, setIsRequestOpen] = useState(false);
   const requestModalRef = useRef<HTMLDivElement | null>(null);
+
+  // Estado do Chat da tarefa
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const chatButtonRef = useRef<HTMLButtonElement | null>(null);
 
   // Anexos de execução
   const [executionFiles, setExecutionFiles] = useState<File[]>([]);
@@ -556,14 +562,27 @@ export function TaskDetailModal({
             </h2>
           </div>
 
-          <button
-            type="button"
-            aria-label="Fechar modal de detalhes"
-            onClick={onClose}
-            className="grid size-8 sm:size-9 shrink-0 place-items-center rounded-lg text-muted hover:bg-slate-100 hover:text-text transition-colors focus-visible:outline-2 focus-visible:outline-brand-700 cursor-pointer"
-          >
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              ref={chatButtonRef}
+              type="button"
+              aria-label="Abrir chat da tarefa"
+              title="Abrir chat da tarefa"
+              onClick={() => setIsChatOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50/80 px-2.5 py-1.5 text-xs font-semibold text-brand-700 shadow-2xs hover:bg-brand-100 transition-colors focus-visible:outline-2 focus-visible:outline-brand-700 cursor-pointer"
+            >
+              <MessageSquare size={15} />
+              <span className="hidden sm:inline">Chat da tarefa</span>
+            </button>
+            <button
+              type="button"
+              aria-label="Fechar modal de detalhes"
+              onClick={onClose}
+              className="grid size-8 sm:size-9 shrink-0 place-items-center rounded-lg text-muted hover:bg-slate-100 hover:text-text transition-colors focus-visible:outline-2 focus-visible:outline-brand-700 cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </header>
 
         {/* ======================================================== */}
@@ -1860,6 +1879,17 @@ export function TaskDetailModal({
             </div>
           </div>
         </div>
+      )}
+      {/* Painel do Chat da Tarefa */}
+      {isChatOpen && task && (
+        <TaskChatPanel
+          isOpen={isChatOpen}
+          onClose={() => setIsChatOpen(false)}
+          taskId={task.id}
+          taskPublicNumber={task.publicNumber}
+          taskTitle={currentCycle?.title || task.title}
+          triggerElement={chatButtonRef.current}
+        />
       )}
     </div>
   );
