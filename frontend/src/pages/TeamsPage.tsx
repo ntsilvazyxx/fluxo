@@ -80,8 +80,8 @@ export function TeamsPage() {
     <section className="mx-auto max-w-4xl">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Equipes</h1>
-          <p className="mt-2 text-sm text-muted">Consulte, edite e inative equipes do sistema.</p>
+          <h1 className="seaf-page-title tracking-tight">Equipes</h1>
+          <p className="mt-2 seaf-page-description text-muted">Consulte, edite e inative equipes do sistema.</p>
         </div>
         {canManage && <button onClick={openCreate} className="action-primary"><Plus size={18} />Nova equipe</button>}
       </div>

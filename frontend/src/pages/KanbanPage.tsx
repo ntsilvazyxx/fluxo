@@ -361,13 +361,13 @@ export function KanbanPage() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-sm font-bold text-brand-700">
+          <p className="seaf-eyebrow text-brand-700">
             {managerial ? 'Acompanhamento e execução' : 'Acompanhamento e execução pessoal'}
           </p>
-          <h1 className="mt-1 text-3xl font-extrabold">
+          <h1 className="mt-1 seaf-page-title">
             Kanban de tarefas
           </h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted">
+          <p className="mt-2 max-w-3xl seaf-page-description text-muted">
             {managerial
               ? 'Acompanhamento operacional das tarefas organizadas por fluxo de execução.'
               : 'Tarefas e entregas autorizadas organizadas por fluxo de execução.'}
@@ -731,7 +731,7 @@ function pageNumber(value: string | null) {
 
 function FilterSelect({ label, name, value, change, children }: any) {
   return (
-    <label className="text-xs font-bold text-muted">
+    <label className="seaf-label text-muted">
       {label}
       <select className="field mt-1" name={name} value={value} onChange={change}>
         {children}
@@ -804,11 +804,11 @@ function KanbanColumnDroppable({
       className={`flex flex-col min-w-0 rounded-xl border p-3 sm:p-4 transition-colors ${statusStyle}`}
     >
       <div className="mb-3 flex min-h-9 items-center justify-between gap-2">
-        <h2 className="text-sm font-extrabold">{label}</h2>
-        <span
-          aria-label={`${count} cartões nesta coluna`}
-          className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-brand-900 shadow-xs"
-        >
+        <h2 className="seaf-section-title">{label}</h2>
+          <span
+            aria-label={`${count} cartões nesta coluna`}
+            className="rounded-full bg-white px-2.5 py-1 seaf-badge text-brand-900 shadow-xs"
+          >
           {isLoading ? '…' : count}
         </span>
       </div>

@@ -372,4 +372,11 @@ describe('Pop-up de Nova Tarefa com Anexos (TaskCreateModal)', () => {
     expect(trigger.focus).toHaveBeenCalled();
     document.body.removeChild(trigger);
   });
+
+  it('12. Possui largura máxima de 800px no desktop e margem mínima no backdrop', async () => {
+    render(<TaskCreateModal isOpen={true} onClose={() => {}} onTaskCreated={() => {}} />);
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveClass('max-w-[800px]');
+    expect(dialog.parentElement).toHaveClass('p-4');
+  });
 });

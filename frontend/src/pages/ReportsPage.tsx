@@ -119,9 +119,9 @@ export function ReportsPage() {
       {/* Cabeçalho de Tela (oculto na impressão) */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between print:hidden">
         <div>
-          <p className="text-sm font-bold text-brand-700">Visão gerencial</p>
-          <h1 className="mt-1 text-2xl sm:text-3xl font-extrabold text-text">Relatório de tarefas</h1>
-          <p className="mt-1 text-sm text-muted">
+          <p className="seaf-eyebrow text-brand-700">Visão gerencial</p>
+          <h1 className="mt-1 seaf-page-title text-text">Relatório de tarefas</h1>
+          <p className="mt-1 seaf-page-description text-muted">
             Consulta consolidada de tarefas dentro do seu escopo, com filtros temporais e exportação.
           </p>
         </div>

@@ -186,9 +186,8 @@ export function TaskCreateForm({
         staged.uploadedId = json.data.id;
         ids.push(json.data.id);
       } catch (cause: any) {
-        const message = `Não foi possível enviar o anexo "${staged.originalName}": ${
-          cause.message || 'Erro desconhecido.'
-        }`;
+        const message = `Não foi possível enviar o anexo "${staged.originalName}": ${cause.message || 'Erro desconhecido.'
+          }`;
         setError(message);
         throw new Error(message);
       }
@@ -256,9 +255,9 @@ export function TaskCreateForm({
         initialAttachmentIds: attachmentIds,
         ...(hasSigadoc
           ? {
-              sigadocProcessNumber: sigadocNumber.trim(),
-              sigadocProcessLink: sigadocLink.trim(),
-            }
+            sigadocProcessNumber: sigadocNumber.trim(),
+            sigadocProcessLink: sigadocLink.trim(),
+          }
           : {}),
         ...(raw.reason ? { reason: String(raw.reason) } : {}),
       };
@@ -285,9 +284,8 @@ export function TaskCreateForm({
   return (
     <form
       onSubmit={submit}
-      className={`space-y-4 ${
-        isModal ? '' : 'mt-7 rounded-2xl border border-border bg-white p-5 sm:p-7'
-      }`}
+      className={`space-y-4 ${isModal ? '' : 'mt-7 rounded-2xl border border-border bg-white p-5 sm:p-7'
+        }`}
     >
       {user.role.code === 'ADMIN_MASTER' && (
         <p
@@ -435,7 +433,7 @@ export function TaskCreateForm({
                 <div className="flex items-center gap-2 min-w-0">
                   <FileText size={15} className="text-brand-700 shrink-0" />
                   <span
-                    className="font-medium text-text truncate max-w-[200px] sm:max-w-xs"
+                    className="font-medium text-text truncate max-w-[200px] sm:max-w-md md:max-w-lg"
                     title={staged.originalName}
                   >
                     {staged.originalName}
@@ -675,7 +673,7 @@ export function TaskCreateModal({
           onClose();
         }
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs animate-in fade-in duration-200"
     >
       <div
         ref={modalRef}
@@ -683,7 +681,7 @@ export function TaskCreateModal({
         aria-modal="true"
         aria-labelledby="create-task-modal-title"
         tabIndex={-1}
-        className="relative flex flex-col w-full max-w-[540px] max-h-[90vh] rounded-2xl border border-border bg-white shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden text-left"
+        className="relative flex flex-col w-full max-w-[800px] max-h-[90vh] rounded-2xl border border-border bg-white shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden text-left"
       >
         {/* Cabeçalho */}
         <div className="flex items-center justify-between border-b border-border px-5 py-3.5 bg-white/95">

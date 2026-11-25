@@ -79,7 +79,7 @@ export function TaskDetailPage() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-sm font-bold text-brand-700">Tarefa #{task.publicNumber} · Ciclo {currentCycle.cycleNumber}</p>
-            <h1 className="mt-2 text-3xl font-extrabold">{currentCycle.title}</h1>
+            <h1 className="mt-2 seaf-page-title">{currentCycle.title}</h1>
             <p className="mt-3 max-w-3xl whitespace-pre-wrap text-muted">{currentCycle.description}</p>
             {task.sigadocProcessNumber && task.sigadocProcessLink && (
               <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-border/80 bg-slate-50 p-2.5 sm:px-3 text-xs">

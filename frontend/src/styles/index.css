@@ -12,7 +12,15 @@
   --color-success: #217a55;
   --color-warning: #a8620a;
   --color-danger: #b42332;
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", Inter, "Segoe UI", sans-serif;
+  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-legacy: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", Inter, "Segoe UI", sans-serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: clamp(1.55rem, 2.2vw, 2rem);
+  --font-size-3xl: clamp(2rem, 3vw, 2.75rem);
   --shadow-card: 0 8px 30px rgba(23, 35, 60, 0.06);
   --shadow-panel: 0 24px 80px rgba(5, 15, 45, 0.28);
 }
@@ -33,7 +41,11 @@ body {
   min-height: 100vh;
   background: var(--color-background);
   font-family: var(--font-sans);
-  line-height: 1.5;
+  line-height: 1.55;
+}
+
+.login-screen {
+  font-family: var(--font-legacy);
 }
 
 button,
@@ -64,11 +76,186 @@ main { overflow-wrap: anywhere; }
 .action-primary, .action-secondary, .action-danger { white-space: nowrap; flex-shrink: 0; }
 button:focus-visible, a:focus-visible { outline: 2px solid var(--color-brand-700); outline-offset: 3px; }
 
+.app-shell {
+  letter-spacing: -0.011em;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.app-shell h1, .app-shell h2, .app-shell h3, .app-shell h4 {
+  letter-spacing: -0.014em;
+  text-wrap: balance;
+  color: var(--color-text);
+}
+
+.app-shell h1 { font-weight: 750; line-height: 1.2; }
+.app-shell h2 { font-weight: 750; line-height: 1.25; }
+.app-shell h3 { font-weight: 700; line-height: 1.3; }
+.app-shell h4 { font-weight: 700; line-height: 1.35; }
+
+.app-shell section:not([data-column-status]),
+.app-shell [class*='rounded-xl'][class*='bg-white'][class*='border'] {
+  border-radius: 0.85rem;
+}
+
+.app-shell p {
+  text-wrap: pretty;
+}
+
+.app-shell input,
+.app-shell select,
+.app-shell textarea,
+.app-shell button {
+  font-family: inherit;
+  letter-spacing: inherit;
+}
+
+.app-shell input:focus-visible:not(.field),
+.app-shell select:focus-visible:not(.field),
+.app-shell textarea:focus-visible:not(.field) {
+  outline: 2px solid var(--color-brand-700);
+  outline-offset: 1px;
+}
+
+.app-shell .field {
+  line-height: 1.45;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.app-shell .action-primary,
+.app-shell .action-secondary,
+.app-shell .action-danger {
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.app-shell .action-primary:not(:disabled):hover { background-color: var(--color-brand-700); box-shadow: 0 1px 2px rgba(5, 15, 45, 0.18); }
+.app-shell .action-secondary:not(:disabled):hover { background-color: var(--color-brand-100); box-shadow: 0 1px 2px rgba(5, 15, 45, 0.08); }
+.app-shell .action-danger:not(:disabled):hover { filter: brightness(0.96); box-shadow: 0 1px 2px rgba(5, 15, 45, 0.12); }
+
+.app-shell table {
+  border-collapse: collapse;
+}
+
+.app-shell th {
+  font-weight: 650;
+}
+
+.app-shell td, .app-shell th {
+  line-height: 1.45;
+  vertical-align: middle;
+}
+
+.app-shell ::-webkit-scrollbar { width: 12px; height: 12px; }
+.app-shell ::-webkit-scrollbar-thumb { border: 4px solid transparent; border-radius: 999px; background: color-mix(in srgb, var(--color-muted) 35%, transparent); background-clip: padding-box; }
+.app-shell ::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--color-muted) 55%, transparent); background-clip: padding-box; }
+.app-shell ::-webkit-scrollbar-track { background: transparent; }
+
+/* === Segunda passada visual (apresentação apenas) === */
+
+/* Superfícies: cartões e painéis brancos com acabamento mais consistente */
+.app-shell article[class*='rounded-xl'],
+.app-shell section[class*='rounded-xl'][class*='bg-white'] {
+  box-shadow: 0 1px 2px rgba(23, 35, 60, 0.05), 0 4px 16px rgba(23, 35, 60, 0.04);
+}
+
+/* Cartões do Kanban: elevação no hover e leve realce de superfície */
+.app-shell article[data-task-id] {
+  transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.15s ease;
+}
+
+.app-shell article[data-task-id]:hover {
+  box-shadow: 0 2px 4px rgba(23, 35, 60, 0.06), 0 10px 28px rgba(23, 35, 60, 0.1);
+  transform: translateY(-1px);
+}
+
+/* Colunas do Kanban: cabeçalho levemente mais definido */
+.app-shell section[data-column-status] > div:first-child h2 {
+  letter-spacing: 0.01em;
+}
+
+/* Formulários: foco com anel sutil além do contorno */
+.app-shell .field:focus {
+  border-color: var(--color-brand-700);
+}
+
+/* Botões: micro-elevação no hover, reforço de peso dos rótulos */
+.app-shell .action-primary,
+.app-shell .action-secondary,
+.app-shell .action-danger {
+  letter-spacing: 0.002em;
+}
+
+.app-shell .action-primary:not(:disabled):active,
+.app-shell .action-secondary:not(:disabled):active,
+.app-shell .action-danger:not(:disabled):active {
+  transform: translateY(0.5px);
+}
+
+/* Navegação horizontal: rótulo levemente mais definido */
+.app-shell nav[aria-label='Navegação principal'] a span {
+  letter-spacing: -0.006em;
+}
+
 @layer components {
   .field { @apply min-h-11 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-700; }
   .action-primary { @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-brand-900 px-4 text-sm font-bold text-white disabled:opacity-60; }
   .action-secondary { @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-brand-700 px-4 text-sm font-bold text-brand-900 disabled:opacity-60; }
   .action-danger { @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-danger px-4 text-sm font-bold text-white disabled:opacity-60; }
+}
+
+/* === Tipografia compartilhada (padrão Pró-Leite, apenas tipografia) === */
+
+.seaf-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.7rem;
+  font-weight: 750;
+  line-height: 1.2;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.seaf-page-title {
+  font-size: var(--font-size-2xl);
+  font-weight: 750;
+  line-height: 1.2;
+  letter-spacing: -0.035em;
+}
+
+.seaf-page-description {
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.seaf-section-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+}
+
+.seaf-label {
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.seaf-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.seaf-table th {
+  font-size: 0.68rem;
+  font-weight: 750;
+  line-height: 1.2;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.seaf-table td {
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 .hero-grid {

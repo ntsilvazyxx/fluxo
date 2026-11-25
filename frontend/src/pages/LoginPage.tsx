@@ -18,7 +18,7 @@ export function LoginPage() {
   };
   return (
     <main
-      className="relative grid min-h-screen place-items-center bg-slate-50 bg-cover bg-center bg-no-repeat p-4 sm:p-6"
+      className="login-screen relative grid min-h-screen place-items-center bg-slate-50 bg-cover bg-center bg-no-repeat p-4 sm:p-6"
       style={{ backgroundImage: `url(${loginBg})` }}
     >
       <section className="w-full max-w-md rounded-2xl border border-border/80 bg-white/95 p-6 shadow-xl backdrop-blur-sm sm:p-8" aria-labelledby="login-title">

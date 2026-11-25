@@ -29,7 +29,7 @@ export function NavItem({ to, label, icon: Icon, end }: NavItemProps) {
             className={`transition-colors duration-150 ${isActive ? 'text-white' : 'text-slate-300 group-hover:text-white'}`}
             aria-hidden="true"
           />
-          <span className="text-[11px] sm:text-xs tracking-tight mt-1 whitespace-nowrap">
+          <span className="seaf-label mt-1 whitespace-nowrap">
             {label}
           </span>
         </>

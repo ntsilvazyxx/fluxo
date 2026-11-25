@@ -40,7 +40,7 @@ const priorityLabels = {
 
 export function StatusBadge({ status }: { status: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-100 px-2.5 py-1 text-xs font-bold text-brand-900">
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-100 px-2.5 py-1 seaf-badge text-brand-900">
       <Circle size={10} fill="currentColor" />
       {statusLabels[status as keyof typeof statusLabels] || status}
     </span>
@@ -51,7 +51,7 @@ export function PriorityBadge({ priority }: { priority: string }) {
   const danger = priority === 'URGENT';
   return (
     <span
-      className={`rounded-full px-2.5 py-1 text-xs font-bold ${danger ? 'bg-red-50 text-danger' : 'bg-slate-100 text-muted'
+      className={`rounded-full px-2.5 py-1 seaf-badge ${danger ? 'bg-red-50 text-danger' : 'bg-slate-100 text-muted'
         }`}
     >
       {priorityLabels[priority as keyof typeof priorityLabels] || priority}
@@ -603,7 +603,7 @@ export function EmptyTasks({ history = false }: { history?: boolean }) {
     <div className="grid min-h-40 place-items-center rounded-2xl border border-dashed border-border bg-white p-6 text-center">
       <div>
         {history ? <CircleCheck className="mx-auto text-success" /> : <Clock3 className="mx-auto text-brand-700" />}
-        <p className="mt-3 font-bold">Nenhuma tarefa encontrada</p>
+        <p className="mt-3 font-semibold">Nenhuma tarefa encontrada</p>
         <p className="mt-1 text-sm text-muted">Ajuste os filtros ou aguarde novas movimentações.</p>
       </div>
     </div>

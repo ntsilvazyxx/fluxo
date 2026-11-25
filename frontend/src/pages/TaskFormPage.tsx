@@ -6,8 +6,8 @@ export function TaskFormPage() {
 
   return (
     <div className="mx-auto w-full max-w-3xl">
-      <p className="text-sm font-bold text-brand-700">Nova tarefa</p>
-      <h1 className="mt-1 text-3xl font-extrabold">Criar e encaminhar tarefa</h1>
+      <p className="seaf-eyebrow text-brand-700">Nova tarefa</p>
+      <h1 className="mt-1 seaf-page-title">Criar e encaminhar tarefa</h1>
       <TaskCreateForm
         onSuccess={(task) => navigate(`/kanban/tarefas/${task.id}`)}
         onCancel={() => navigate('/kanban')}

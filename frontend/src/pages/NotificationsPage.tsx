@@ -106,8 +106,8 @@ export function NotificationsPage() {
   return <div className="max-w-3xl mx-auto">
     <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 className="text-2xl font-extrabold text-text">Notificações</h1>
-        <p className="text-sm text-muted">Avisos sobre atribuições, solicitações, prazos e alterações das suas tarefas.</p>
+        <h1 className="seaf-page-title text-text">Notificações</h1>
+        <p className="seaf-page-description text-muted">Avisos sobre atribuições, solicitações, prazos e alterações das suas tarefas.</p>
       </div>
       <div className="flex items-center gap-2">
         <label className="flex items-center gap-2 cursor-pointer">

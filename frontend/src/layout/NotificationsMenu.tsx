@@ -99,7 +99,7 @@ export function NotificationsMenu() {
           aria-label="Notificações recentes"
         >
           <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-bold text-text">Notificações</h2>
+            <h2 className="seaf-section-title text-text">Notificações</h2>
             <Link
               to="/notificacoes"
               onClick={() => setNoticeOpen(false)}
