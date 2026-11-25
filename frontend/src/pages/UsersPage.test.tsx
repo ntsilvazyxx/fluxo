@@ -150,4 +150,96 @@ describe('UsersPage — Padronização de Perfis em Português e RBAC (Prompt 54
       );
     });
   });
+
+  it('inativa com PATCH, envia a justificativa e atualiza a listagem sem recarregá-la', async () => {
+    render(<UsersPage />);
+    await screen.findByText('Carlos Admin');
+    authMock.request.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { user: { ...mockUsers[0], isActive: false } } }),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Inativar Carlos Admin' }));
+    fireEvent.change(screen.getByLabelText('Justificativa'), { target: { value: 'Desligamento confirmado' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Inativar usuário' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Inativar usuário' })).not.toBeInTheDocument());
+    expect(screen.getByText(/Admin Master · Inativo/)).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Usuário inativado');
+    expect(authMock.request).toHaveBeenNthCalledWith(2, '/users/1', {
+      method: 'PATCH',
+      body: JSON.stringify({ isActive: false, reason: 'Desligamento confirmado' }),
+    });
+    expect(authMock.request).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserva a justificativa e mostra o erro HTTP retornado pelo backend', async () => {
+    render(<UsersPage />);
+    await screen.findByText('Carlos Admin');
+    authMock.request.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: { message: 'A justificativa precisa ser mais detalhada.' } }),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Inativar Carlos Admin' }));
+    const reason = screen.getByLabelText('Justificativa') as HTMLTextAreaElement;
+    fireEvent.change(reason, { target: { value: 'Motivo teste' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Inativar usuário' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('A justificativa precisa ser mais detalhada.');
+    expect(reason.value).toBe('Motivo teste');
+    expect(screen.getByRole('dialog', { name: 'Inativar usuário' })).toBeInTheDocument();
+  });
+
+  it('trata falha de rede como resultado incerto e consulta o estado sem repetir o PATCH', async () => {
+    render(<UsersPage />);
+    await screen.findByText('Carlos Admin');
+    authMock.request.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Inativar Carlos Admin' }));
+    fireEvent.change(screen.getByLabelText('Justificativa'), { target: { value: 'Motivo de teste isolado' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Inativar usuário' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('falha de conexão');
+    expect(screen.queryByText('Failed to fetch')).not.toBeInTheDocument();
+
+    authMock.request.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { user: { ...mockUsers[0], isActive: false } } }),
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Verificar situação atual' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('A consulta confirmou que o usuário foi inativado.');
+    expect(screen.getByText(/Admin Master · Inativo/)).toBeInTheDocument();
+    expect(authMock.request).toHaveBeenNthCalledWith(3, '/users/1');
+    expect(authMock.request.mock.calls.filter(([, options]) => options?.method === 'PATCH')).toHaveLength(1);
+  });
+
+  it('bloqueia submissão duplicada enquanto a alteração está em andamento', async () => {
+    let resolveRequest: (value: unknown) => void = () => {};
+    const pending = new Promise((resolve) => { resolveRequest = resolve; });
+    render(<UsersPage />);
+    await screen.findByText('Carlos Admin');
+    authMock.request.mockReturnValueOnce(pending);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Inativar Carlos Admin' }));
+    fireEvent.change(screen.getByLabelText('Justificativa'), { target: { value: 'Motivo de teste isolado' } });
+    const submit = screen.getByRole('button', { name: 'Inativar usuário' });
+    fireEvent.click(submit);
+    fireEvent.submit(submit.closest('form')!);
+
+    expect(authMock.request.mock.calls.filter(([, options]) => options?.method === 'PATCH')).toHaveLength(1);
+    resolveRequest({ ok: true, status: 200, json: async () => ({ data: { user: { ...mockUsers[0], isActive: false } } }) });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Inativar usuário' })).not.toBeInTheDocument());
+  });
+
+  it('não oferece inativação da própria conta na interface', async () => {
+    authMock.user = { id: '1', name: 'Carlos Admin', role: { code: 'ADMIN_MASTER', label: 'Admin Master' } };
+    render(<UsersPage />);
+    await screen.findByText('Carlos Admin');
+    expect(screen.queryByRole('button', { name: 'Inativar Carlos Admin' })).not.toBeInTheDocument();
+  });
 });

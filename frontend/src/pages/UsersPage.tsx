@@ -1,5 +1,5 @@
 import { KeyRound, Pencil, Plus, Search, UserCheck, UserX, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthContext.tsx';
 import { getRoleLabel, getSelectableRoles } from '../auth/roles.ts';
 
@@ -16,6 +16,8 @@ export function UsersPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [statusResultUncertain, setStatusResultUncertain] = useState(false);
+  const statusSubmissionInFlight = useRef(false);
 
   const load = useCallback(async () => {
     const response = await request('/users');
@@ -37,7 +39,7 @@ export function UsersPage() {
   const selectableRoles = useMemo(() => getSelectableRoles(actor.role.code), [actor.role.code]);
 
   const replaceUser = (updated: User) => setUsers((items) => items.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
-  const closeModals = () => { setFormMode(null); setEditing(null); setResetting(null); setChangingStatus(null); };
+  const closeModals = () => { setFormMode(null); setEditing(null); setResetting(null); setChangingStatus(null); setStatusResultUncertain(false); };
 
   const submitForm = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -97,22 +99,68 @@ export function UsersPage() {
 
   const submitStatus = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!changingStatus) return;
+    if (!changingStatus || statusSubmissionInFlight.current) return;
+    statusSubmissionInFlight.current = true;
     const form = new FormData(event.currentTarget);
+    const desiredIsActive = !changingStatus.isActive;
     setBusy(true); setError(''); setMessage('');
     try {
-      const response = await request(`/users/${changingStatus.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ isActive: !changingStatus.isActive, reason: String(form.get('reason') ?? '') }),
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error?.message ?? 'Não foi possível alterar a situação do usuário.');
+      let response: Response;
+      try {
+        response = await request(`/users/${changingStatus.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ isActive: desiredIsActive, reason: String(form.get('reason') ?? '') }),
+        });
+      } catch {
+        setStatusResultUncertain(true);
+        setError('Não foi possível confirmar a alteração por uma falha de conexão. Verifique a situação atual antes de tentar novamente.');
+        return;
+      }
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.error?.message ?? `Não foi possível alterar a situação do usuário (HTTP ${response.status}).`);
+      if (!body?.data?.user) {
+        setStatusResultUncertain(true);
+        setError('O servidor respondeu, mas não foi possível confirmar o resultado. Verifique a situação atual antes de tentar novamente.');
+        return;
+      }
       replaceUser(body.data.user);
       setMessage(changingStatus.isActive ? 'Usuário inativado. Sessões ativas foram encerradas.' : 'Usuário reativado com sucesso.');
       setChangingStatus(null);
+      setStatusResultUncertain(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível alterar a situação do usuário.');
     } finally {
+      statusSubmissionInFlight.current = false;
+      setBusy(false);
+    }
+  };
+
+  const verifyStatus = async () => {
+    if (!changingStatus || statusSubmissionInFlight.current) return;
+    statusSubmissionInFlight.current = true;
+    setBusy(true); setError(''); setMessage('');
+    try {
+      const response = await request(`/users/${changingStatus.id}`);
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.error?.message ?? `Não foi possível consultar a situação do usuário (HTTP ${response.status}).`);
+      if (!body?.data?.user) throw new Error('O servidor retornou uma resposta inválida ao consultar o usuário.');
+      const current = body.data.user as User;
+      replaceUser(current);
+      if (current.isActive !== changingStatus.isActive) {
+        setMessage(changingStatus.isActive ? 'A consulta confirmou que o usuário foi inativado.' : 'A consulta confirmou que o usuário foi reativado.');
+        setChangingStatus(null);
+        setStatusResultUncertain(false);
+      } else {
+        setStatusResultUncertain(false);
+        setError(`A consulta confirmou que o usuário continua ${current.isActive ? 'ativo' : 'inativo'}. Você pode tentar novamente.`);
+      }
+    } catch (cause) {
+      setStatusResultUncertain(true);
+      setError(cause instanceof TypeError
+        ? 'Ainda não foi possível consultar o servidor. Não repita a alteração até confirmar a situação atual.'
+        : cause instanceof Error ? cause.message : 'Não foi possível consultar a situação atual do usuário.');
+    } finally {
+      statusSubmissionInFlight.current = false;
       setBusy(false);
     }
   };
@@ -133,7 +181,7 @@ export function UsersPage() {
       </label>
 
       {message && <p role="status" className="mt-4 rounded-xl bg-brand-100 p-3 text-sm text-brand-900">{message}</p>}
-      {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-danger">{error}</p>}
+      {error && !changingStatus && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-danger">{error}</p>}
 
       <div className="mt-5 divide-y divide-border overflow-hidden rounded-xl border border-border bg-white">
         {visible.length ? visible.map((item) => (
@@ -147,7 +195,7 @@ export function UsersPage() {
               {canEdit && <>
                 <button className="grid min-h-11 min-w-11 place-items-center rounded-lg text-brand-700 hover:bg-brand-100" aria-label={`Editar ${item.name}`} onClick={() => { setEditing(item); setFormMode('edit'); setError(''); setMessage(''); }}><Pencil size={17} /></button>
                 <button className="grid min-h-11 min-w-11 place-items-center rounded-lg text-brand-700 hover:bg-brand-100" aria-label={`Redefinir senha de ${item.name}`} onClick={() => { setResetting(item); setError(''); setMessage(''); }}><KeyRound size={17} /></button>
-                {item.id !== actor.id && <button className={`grid min-h-11 min-w-11 place-items-center rounded-lg hover:bg-brand-100 ${item.isActive ? 'text-danger' : 'text-success'}`} aria-label={item.isActive ? `Inativar ${item.name}` : `Reativar ${item.name}`} onClick={() => { setChangingStatus(item); setError(''); setMessage(''); }}>{item.isActive ? <UserX size={17} /> : <UserCheck size={17} />}</button>}
+                {item.id !== actor.id && <button className={`grid min-h-11 min-w-11 place-items-center rounded-lg hover:bg-brand-100 ${item.isActive ? 'text-danger' : 'text-success'}`} aria-label={item.isActive ? `Inativar ${item.name}` : `Reativar ${item.name}`} onClick={() => { setChangingStatus(item); setStatusResultUncertain(false); setError(''); setMessage(''); }}>{item.isActive ? <UserX size={17} /> : <UserCheck size={17} />}</button>}
               </>}
             </div>
           </article>
@@ -205,7 +253,7 @@ export function UsersPage() {
           <form onSubmit={submitStatus} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-panel">
             <div className="flex items-center justify-between">
               <h2 id="status-title" className="text-lg font-bold">{changingStatus.isActive ? 'Inativar usuário' : 'Reativar usuário'}</h2>
-              <button type="button" onClick={closeModals} className="grid size-10 place-items-center rounded-lg hover:bg-background" aria-label="Fechar"><X size={19} /></button>
+              <button type="button" onClick={closeModals} disabled={busy} className="grid size-10 place-items-center rounded-lg hover:bg-background" aria-label="Fechar"><X size={19} /></button>
             </div>
             <p className="mt-3 text-sm text-muted">
               {changingStatus.isActive
@@ -213,8 +261,10 @@ export function UsersPage() {
                 : <>O usuário <strong>{changingStatus.name}</strong> poderá voltar a entrar no sistema e receber atribuições.</>}
             </p>
             <label className="mt-5 block text-sm font-semibold">Justificativa<textarea className="field mt-1" name="reason" minLength={5} required autoFocus /></label>
+            {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-danger">{error}</p>}
             <div className="mt-6 flex justify-end gap-2">
-              <button type="button" className="action-secondary" onClick={closeModals}>Cancelar</button>
+              <button type="button" className="action-secondary" onClick={closeModals} disabled={busy}>Cancelar</button>
+              {statusResultUncertain && <button type="button" className="action-secondary" onClick={() => void verifyStatus()} disabled={busy}>{busy ? 'Verificando…' : 'Verificar situação atual'}</button>}
               <button disabled={busy} className="action-primary">{busy ? 'Salvando…' : changingStatus.isActive ? 'Inativar usuário' : 'Reativar usuário'}</button>
             </div>
           </form>
