@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revisão de UI/UX do SEAF</title>
+<style>
+@page { size: A4; margin: 18mm 15mm 19mm; }
+* { box-sizing: border-box; }
+body { margin: 0; color: #17233c; font: 10.5pt/1.48 Arial, sans-serif; background: #fff; }
+main { max-width: 980px; margin: 0 auto; }
+h1 { color: #1a3281; font-size: 26pt; line-height: 1.08; margin: 0 0 14px; border-bottom: 4px solid #25449b; padding-bottom: 12px; }
+h2 { color: #1a3281; font-size: 17pt; line-height: 1.2; margin: 26px 0 10px; break-after: avoid; }
+h3 { color: #25449b; font-size: 13pt; margin: 20px 0 8px; break-after: avoid; }
+p { margin: 6px 0 10px; }
+ul, ol { margin: 6px 0 12px; padding-left: 22px; }
+li { margin: 3px 0; }
+strong { color: #17233c; }
+code { background: #eef2fb; color: #1a3281; padding: 1px 4px; border-radius: 4px; }
+pre { white-space: pre-wrap; break-inside: avoid; background: #f5f7fb; border: 1px solid #dce3ef; border-left: 4px solid #25449b; border-radius: 8px; padding: 11px; font: 8.3pt/1.25 Consolas, monospace; color: #17233c; }
+a { color: #25449b; text-decoration: none; }
+.table-wrap { margin: 10px 0 16px; }
+table { width: 100%; border-collapse: collapse; font-size: 8.2pt; line-height: 1.3; }
+thead { display: table-header-group; }
+tr { break-inside: avoid; }
+th { background: #1a3281; color: #fff; text-align: left; padding: 7px 6px; border: 1px solid #1a3281; }
+td { vertical-align: top; padding: 6px; border: 1px solid #dce3ef; }
+tbody tr:nth-child(even) { background: #f5f7fb; }
+h1 + p { color: #526176; }
+@media screen { body { background: #eef2f8; padding: 24px; } main { background: #fff; padding: 48px; box-shadow: 0 12px 50px #17233c22; } }
+</style></head><body><main><h1>Revisão de UI/UX do SEAF</h1>
+<p><strong>Data:</strong> 25 de novembro de 2026   <strong>Escopo:</strong> sistema web React e sua experiência responsiva/mobile   <strong>Status:</strong> revisão diagnóstica; nenhuma alteração de interface foi aplicada   <strong>Privacidade:</strong> análise local, sem envio de código, telas privadas, credenciais ou dados operacionais a serviços externos</p>
+<h2>1. Resumo executivo</h2>
+<p>O SEAF possui uma base visual consistente, identidade institucional clara, controles de formulário com rótulos e estados básicos de erro, foco visível global e boa adaptação da tela de login. O teste automatizado da rota pública <code>/login</code> não encontrou violações axe nem overflow em 1280 x 800 e 390 x 844.</p>
+<p>Os maiores riscos estão no fluxo autenticado:</p>
+<ol><li><strong>Recursos gerenciais importantes não são descobertos pela navegação:</strong> existem rotas para Dashboard e Relatórios, mas não há links para elas na navegação principal.</li><li><strong>O Kanban mobile depende de uma grade fixa de 768 px e rolagem horizontal com scrollbar ocultada:</strong> o usuário precisa descobrir por tentativa que há mais colunas fora da tela.</li><li><strong>O gerenciamento de foco dos diálogos é inconsistente:</strong> há muitos elementos com <code>role="dialog"</code> e <code>aria-modal="true"</code>, mas vários fluxos simples não prendem o foco, não restauram o foco ao gatilho e não fecham com Escape.</li><li><strong>A hierarquia do aplicativo autenticado é horizontal e densa:</strong> cabeçalho institucional, utilidades e navegação competem por altura e atenção, principalmente no celular.</li><li><strong>Estados e visualizações de dados nem sempre têm alternativa equivalente:</strong> o carregamento de notificações é visualmente confundido com estado vazio, e os gráficos gerenciais não oferecem uma tabela/resumo completo dos dados.</li></ol>
+<p>Não existe aplicativo nativo Android, iOS, Flutter ou React Native neste repositório. Neste relatório, “mobile” significa o frontend web responsivo.</p>
+<h2>2. Evidências e limites</h2>
+<h3>Executado</h3>
+<ul><li>Inspeção de 80 arquivos frontend pelo verificador de cobertura de estados.</li><li>Smoke test HTTP de <code>http://localhost:5173/login</code>: HTTP 200 e HTML não vazio.</li><li>Capturas locais em 1280 x 800 e 390 x 844.</li><li>axe-core na tela de login, nos dois viewports: <strong>0 violações encontradas</strong>.</li><li>Verificação de overflow da tela de login: largura do conteúdo igual à largura do viewport nos dois tamanhos.</li><li>Inspeção do código de rotas, shell, navegação, Kanban, dashboard, relatórios, notificações, usuários, equipes e modais de tarefas.</li></ul>
+<h3>Não executado</h3>
+<ul><li>Fluxos autenticados renderizados, porque não foi usada conta operacional nem criada sessão artificial contra o banco funcional.</li><li>Testes com leitor de tela real, VoiceOver/TalkBack ou navegação completa somente por teclado.</li><li>Lighthouse e métricas de desempenho.</li><li>Testes com usuários reais, analytics ou tempo de conclusão de tarefas.</li><li>Avaliação de app nativo, pois esse artefato não existe no repositório analisado.</li></ul>
+<h3>Artefatos de evidência</h3>
+<ul><li><code>.artifacts/ui-ux-audit/login-desktop.png</code></li><li><code>.artifacts/ui-ux-audit/login-mobile.png</code></li><li><code>.artifacts/ui-ux-audit/login-a11y.json</code></li><li><code>reports/ui-ux/state-coverage.json</code></li><li><code>reports/ui-ux/visual-smoke/summary.json</code></li></ul>
+<h2>3. Pontos fortes atuais</h2>
+<ul><li>Identidade institucional clara na tela de login, sem excesso de elementos decorativos.</li><li>Formulário de login simples, com rótulos visíveis, autocomplete e estados de envio/erro.</li><li>Tokens centrais de cor, borda, tipografia e sombra.</li><li>Foco visível global e suporte a <code>prefers-reduced-motion</code>.</li><li>Controles principais com altura mínima de 44 px (<code>min-h-11</code>).</li><li>Rotas protegidas por perfil e nomes acessíveis em vários botões de ícone.</li><li>Estados de erro, vazio, desabilitado, envio e sucesso aparecem no código do produto.</li><li>Kanban, relatórios e listas usam filtros próximos do conteúdo afetado.</li></ul>
+<h2>4. Matriz de severidade</h2>
+<div class="table-wrap"><table><thead><tr><th>Prioridade</th><th>Problema</th><th>Evidência</th><th>Impacto para o usuário</th><th>Recomendação</th><th>Verificação sugerida</th></tr></thead><tbody><tr><td>P1</td><td>Dashboard e Relatórios não aparecem na navegação principal</td><td>Fonte: <code>App.tsx</code> registra as rotas; <code>NavHorizontal.tsx</code> não contém os links</td><td>Gestores podem não descobrir recursos centrais ou depender de URL direta</td><td>Incluir os destinos conforme o perfil; em desktop usar rail/sidebar e em mobile colocar destinos menos frequentes em “Mais”</td><td>Teste de navegação por perfil e teste de encontrabilidade com 5 usuários</td></tr><tr><td>P1</td><td>Kanban mobile exige rolagem horizontal em uma grade de 768 px e oculta a scrollbar</td><td>Fonte: <code>index.css</code> e <code>KanbanPage.tsx</code></td><td>Colunas fora da tela ficam invisíveis; alternar status exige arrastar lateralmente e perde contexto</td><td>Em até 767 px, trocar a grade por abas/segmentos “Pendente”, “Em andamento” e “Concluída”; manter uma coluna visível por vez</td><td>Testar em 320, 390 e 430 px, zoom 200% e teclado</td></tr><tr><td>P1</td><td>Modais não usam um contrato único de foco</td><td>Fonte: vários <code>role="dialog"</code>; apenas alguns componentes têm lógica explícita de Escape/foco</td><td>Usuários de teclado/leitor de tela podem alcançar o conteúdo atrás do modal ou perder o ponto de retorno</td><td>Criar componente <code>AccessibleDialog</code> com foco inicial, ciclo de Tab, Escape, restauração ao gatilho e bloqueio de scroll</td><td>Testes com Tab/Shift+Tab/Escape e axe em cada tipo de modal</td></tr><tr><td>P1</td><td>Navegação horizontal no mobile não sinaliza overflow</td><td>Fonte: <code>overflow-x-auto</code> junto de <code>.no-scrollbar</code></td><td>Itens podem ficar fora da tela sem pista visual; navegação exige precisão e descoberta</td><td>Preferir barra inferior com 3–5 destinos; usar “Mais” para funções secundárias; se mantiver scroll, mostrar fade/indicador</td><td>Captura em 320 px e teste de descoberta sem instrução</td></tr><tr><td>P2</td><td>Cabeçalho móvel ocupa duas faixas persistentes</td><td>Fonte: <code>Header.tsx</code> com barra institucional + navegação, ambas dentro de header sticky</td><td>Reduz área útil do Kanban e pode encobrir foco/conteúdo em zoom</td><td>Usar app bar compacta no mobile e navegação inferior; preservar cabeçalho completo a partir de tablet/desktop</td><td>Testar altura útil, scroll e foco com zoom de 200–400%</td></tr><tr><td>P2</td><td>Botões de notificações e sair têm 36–40 px</td><td>Fonte: <code>NotificationsMenu.tsx</code> e <code>UserMenu.tsx</code> (<code>min-h-9</code>/<code>min-h-10</code>)</td><td>Toques imprecisos, especialmente próximos entre si</td><td>Padronizar área interativa em 44 x 44 px, mesmo que o ícone permaneça com 18–20 px</td><td>Medição no DOM e teste em dispositivo touch</td></tr><tr><td>P2</td><td>Notificações mostram “Sem notificações” durante carregamento inicial</td><td>Fonte: <code>NotificationsPage.tsx</code> usa <code>notifications.length === 0</code> sem separar <code>busy</code></td><td>O sistema comunica vazio antes de saber o resultado, causando mudança brusca e dúvida</td><td>Ordem de estado: erro -&gt; loading/skeleton -&gt; vazio -&gt; lista; preservar lista durante refetch</td><td>Testes de loading inicial, vazio real, refetch e erro</td></tr><tr><td>P2</td><td>Gráficos não têm alternativa tabular completa</td><td>Fonte: <code>DashboardPage.tsx</code> usa Recharts; não há tabela ligada aos gráficos</td><td>Usuários de leitor de tela ou que não distinguem cores perdem valores e tendências</td><td>Adicionar resumo textual e tabela recolhível “Ver dados do gráfico”; não depender somente de cor/tooltip</td><td>axe + leitura com NVDA e comparação dos valores gráfico/tabela</td></tr><tr><td>P2</td><td>Relatório mobile mantém tabela larga com scroll horizontal</td><td>Fonte: <code>ReportsPage.tsx</code> usa <code>overflow-x-auto</code> e tabela de seis colunas</td><td>Comparar tarefa, prazo, status e responsável requer arrastar repetidamente</td><td>Em mobile, renderizar lista de cartões compactos; manter tabela em desktop com cabeçalho sticky</td><td>Testar leitura de 20 itens em 390 px e tempo para localizar tarefa atrasada</td></tr><tr><td>P2</td><td>Não há link “Pular para o conteúdo”</td><td>Fonte: shell e header sem skip link</td><td>Usuários de teclado repetem todos os itens do cabeçalho em cada rota</td><td>Adicionar skip link visível ao foco apontando para <code>main#main-content</code></td><td>Primeiro Tab deve revelar o link e mover foco ao conteúdo</td></tr><tr><td>P2</td><td>Feedback de falha de notificações é silencioso no menu</td><td>Fonte: <code>NotificationsMenu.tsx</code> captura e ignora erros de rede/marcação</td><td>Usuário pode acreditar que marcou como lida quando a ação falhou</td><td>Mostrar estado inline não intrusivo e oferecer “Tentar novamente”; manter estado anterior</td><td>Simular 500 e offline, confirmar mensagem e ausência de falso sucesso</td></tr><tr><td>P2</td><td>Duplicação de telas/fluxos de detalhe aumenta inconsistência</td><td>Fonte: <code>TaskDetailPage</code>, <code>TaskDetailModal</code> e <code>TaskDetailShared</code> coexistem</td><td>Mesma tarefa pode ter ações, layout e foco diferentes conforme a entrada</td><td>Definir uma única composição compartilhada e dois invólucros: página e dialog, com o mesmo modelo de estados</td><td>Testes de paridade de ações e conteúdo entre página/modal</td></tr><tr><td>P3</td><td>Login não oferece mostrar/ocultar senha ou aviso de Caps Lock</td><td>Screenshot + fonte</td><td>Pequena fricção e mais erros de digitação em dispositivos móveis</td><td>Adicionar alternância com nome acessível e aviso de Caps Lock sem expor o valor</td><td>Teste teclado, leitor de tela e mobile</td></tr><tr><td>P3</td><td>Dashboard usa muitas superfícies com peso visual semelhante</td><td>Fonte/manual: cartões de KPI, alertas, quatro gráficos e métricas</td><td>A pergunta “o que exige ação agora?” não tem uma resposta dominante</td><td>Criar faixa “Atenção agora”, reduzir bordas/sombras secundárias e agrupar histórico abaixo</td><td>Teste de cinco segundos: identificar atraso e ação seguinte</td></tr></tbody></table></div>
+<h2>5. Navegação e arquitetura da informação</h2>
+<h3>Problema atual</h3>
+<p>A navegação principal contém Kanban, Arquivadas, Usuários (por perfil) e Equipes. Dashboard e Relatórios existem, porém ficam sem ponto de entrada. Notificações têm um ícone no cabeçalho e uma página separada. Esse modelo mistura:</p>
+<ul><li>destinos principais;</li><li>administração;</li><li>utilidades globais;</li><li>páginas analíticas.</li></ul>
+<h3>Estrutura recomendada</h3>
+<p><strong>Desktop/tablet largo</strong></p>
+<ol><li>Operação: Kanban, Minhas tarefas, Arquivadas.</li><li>Gestão: Dashboard, Relatórios.</li><li>Administração: Equipes, Usuários.</li><li>Utilidades no topo: Notificações, ajuda e perfil.</li></ol>
+<p><strong>Mobile</strong></p>
+<ul><li>Barra inferior: Kanban, Minhas, Notificações, Mais.</li><li>“Mais”: Dashboard, Relatórios, Arquivadas, Equipes, Usuários, perfil e sair.</li><li>Mostrar apenas destinos permitidos pelo perfil.</li></ul>
+<h2>6. Hierarquia visual</h2>
+<h3>Manter</h3>
+<ul><li>Azul institucional como cor primária.</li><li>Tipografia de sistema e títulos compactos.</li><li>Cartões brancos sobre fundo neutro.</li><li>Campos e ações principais com dimensões estáveis.</li></ul>
+<h3>Melhorar</h3>
+<ul><li>Reservar azul preenchido para uma ação primária por região.</li><li>Reduzir sombras profundas em tabelas e painéis operacionais.</li><li>Usar bordas e superfícies neutras para agrupamento; cor semântica apenas para estado.</li><li>Diferenciar “informação”, “atenção” e “ação” por estrutura, ícone e texto, não apenas por cor.</li><li>Criar um cabeçalho de página padrão: breadcrumb opcional, título, descrição curta, ação primária e ações secundárias.</li></ul>
+<h2>7. Wireframes propostos</h2>
+<h3>7.1 Desktop - shell operacional</h3>
+<pre>+----------------------+----------------------------------------------------+
+| SEAF                 | [Busca global]             [Sino] [Perfil]         |
++----------------------+----------------------------------------------------+
+| OPERAÇÃO             | Kanban / Visão atual                            [+]|
+|  ● Kanban            | [Buscar........] [Equipe] [Responsável] [Filtros]  |
+|    Minhas tarefas    +----------------------------------------------------+
+|    Arquivadas        | Atenção agora: 3 atrasadas · 2 aguardando aceite   |
+|                      +----------------------------------------------------+
+| GESTÃO               | Pendente       Em andamento       Concluída         |
+|    Dashboard         | [cartão]       [cartão]           [cartão]          |
+|    Relatórios        | [cartão]       [cartão]           [cartão]          |
+|                      |                                                    |
+| ADMINISTRAÇÃO        |                                                    |
+|    Equipes           |                                                    |
+|    Usuários          |                                                    |
++----------------------+----------------------------------------------------+</pre>
+<p><strong>Objetivo:</strong> tornar todas as áreas encontráveis e manter o conteúdo operacional com largura útil.</p>
+<h3>7.2 Mobile - Kanban sem rolagem horizontal</h3>
+<pre>+----------------------------------+
+| SEAF                    [Sino][A] |
+| Kanban                    [+ Nova]|
+| [Buscar tarefas................]  |
+| [Equipe] [Responsável] [Filtros]  |
+|                                  |
+| [Pendente 8][Andamento 5][Fim 12]|
+|                                  |
+| #142  Atualizar cadastro          |
+| Urgente · vence hoje              |
+| Equipe X · Responsável Y          |
+| [Abrir detalhes]                  |
+|                                  |
+| #139  Revisar processo            |
+| Alta · amanhã                     |
++----------------------------------+
+| [Kanban] [Minhas] [Avisos] [Mais]|
++----------------------------------+</pre>
+<p><strong>Objetivo:</strong> uma coluna por vez, estado selecionado claro e ações alcançáveis com uma mão.</p>
+<h3>7.3 Mobile - detalhe como página/sheet focada</h3>
+<pre>+----------------------------------+
+| [Voltar] Tarefa #142       [•••]  |
+| Atualizar cadastro                |
+| Urgente · Em andamento            |
+|----------------------------------|
+| Resumo | Conversa | Arquivos      |
+|                                  |
+| Responsável                       |
+| Nome da pessoa                    |
+| Prazo                             |
+| 25/11/2026 17:00                  |
+|                                  |
+| Histórico e ações...              |
+|                                  |
+|----------------------------------|
+| [Solicitar ajuste] [Concluir]     |
++----------------------------------+</pre>
+<p><strong>Objetivo:</strong> reduzir modais empilhados, manter contexto e fixar as ações mais importantes no rodapé.</p>
+<h2>8. Plano de melhoria prático</h2>
+<h3>Fase 1 - 0 a 2 semanas: acesso e previsibilidade</h3>
+<ol><li>Adicionar Dashboard e Relatórios à navegação conforme RBAC.</li><li>Adicionar skip link e <code>id</code> no conteúdo principal.</li><li>Criar <code>AccessibleDialog</code> e migrar primeiro Usuários, Equipes e confirmações do Kanban.</li><li>Separar loading/vazio/erro de Notificações.</li><li>Aumentar alvos do header para 44 x 44 px.</li><li>Criar testes de teclado para navegação e diálogos.</li></ol>
+<p><strong>Critérios de aceite:</strong> todas as rotas autorizadas são alcançáveis pela UI; Tab não sai do modal; Escape fecha e restaura foco; nenhuma tela comunica vazio durante loading.</p>
+<h3>Fase 2 - 3 a 6 semanas: mobile operacional</h3>
+<ol><li>Substituir o Kanban horizontal por segmentos/abas em telas pequenas.</li><li>Implementar app bar compacta e barra inferior mobile.</li><li>Criar variante de cartões para Relatórios no mobile.</li><li>Transformar detalhes complexos em página full-screen no mobile.</li><li>Validar 320, 390, 430, 768 e 1280 px, além de zoom 200% e 400%.</li></ol>
+<p><strong>Critérios de aceite:</strong> fluxo principal sem scroll bidimensional em 320 px; destinos principais acessíveis com uma mão; nenhuma ação essencial escondida sem sinal visual.</p>
+<h3>Fase 3 - 7 a 12 semanas: dados, consistência e pesquisa</h3>
+<ol><li>Adicionar alternativas tabulares aos gráficos.</li><li>Consolidar <code>TaskDetailPage</code>, <code>TaskDetailModal</code> e componentes compartilhados.</li><li>Padronizar cabeçalho de página, filtros, empty states e feedback de ações.</li><li>Executar testes moderados com usuários de cada perfil.</li><li>Medir: tempo para localizar tarefa, concluir ação, recuperar erro e encontrar relatório.</li></ol>
+<p><strong>Critérios de aceite:</strong> paridade de conteúdo entre visualizações; gráficos compreensíveis sem cor/tooltip; redução mensurável do tempo e dos erros nas tarefas prioritárias.</p>
+<h2>9. Backlog recomendado</h2>
+<div class="table-wrap"><table><thead><tr><th>Ordem</th><th>Entrega</th><th>Esforço estimado</th><th>Valor</th></tr></thead><tbody><tr><td>1</td><td>Links de Dashboard/Relatórios + testes RBAC</td><td>P</td><td>Alto</td></tr><tr><td>2</td><td>Componente de diálogo acessível</td><td>M</td><td>Alto</td></tr><tr><td>3</td><td>Estados de Notificações</td><td>P</td><td>Médio/alto</td></tr><tr><td>4</td><td>Alvos de toque e skip link</td><td>P</td><td>Médio</td></tr><tr><td>5</td><td>Kanban mobile por segmentos</td><td>G</td><td>Muito alto</td></tr><tr><td>6</td><td>Navegação mobile inferior</td><td>M</td><td>Alto</td></tr><tr><td>7</td><td>Relatórios em cartões mobile</td><td>M</td><td>Alto</td></tr><tr><td>8</td><td>Tabelas/resumos dos gráficos</td><td>M</td><td>Alto</td></tr><tr><td>9</td><td>Consolidação de detalhes da tarefa</td><td>G</td><td>Alto</td></tr><tr><td>10</td><td>Testes com usuários e métricas de UX</td><td>M contínuo</td><td>Muito alto</td></tr></tbody></table></div>
+<p>Legenda: P = pequeno, M = médio, G = grande.</p>
+<h2>10. Plano de validação</h2>
+<ul><li><strong>Automático:</strong> axe nas rotas autenticadas, testes de foco, snapshots de estados e regressão responsiva.</li><li><strong>Teclado:</strong> Tab, Shift+Tab, Enter, Espaço e Escape nos fluxos centrais.</li><li><strong>Leitor de tela:</strong> NVDA + Chrome no desktop; TalkBack + Chrome no Android.</li><li><strong>Visual:</strong> 320 x 568, 390 x 844, 768 x 1024, 1280 x 800 e 1440 x 900.</li><li><strong>Zoom/reflow:</strong> 200% e 400%, verificando conteúdo não encoberto pelo header sticky.</li><li><strong>Usabilidade:</strong> cinco participantes por grupo de perfil para localizar, aceitar, concluir e consultar tarefas.</li></ul>
+<h2>11. Referências de boas práticas</h2>
+<ul><li><a href="https://www.w3.org/WAI/WCAG22/Understanding/reflow">WCAG 2.2 - Reflow</a></li><li><a href="https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum">WCAG 2.2 - Target Size (Minimum)</a></li><li><a href="https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/">WAI-ARIA APG - Modal Dialog Pattern</a></li><li><a href="https://www.w3.org/WAI/tutorials/images/complex/">WAI - Complex Images and Charts</a></li><li><a href="https://m3.material.io/components/app-bars/">Material Design 3 - App bars</a></li><li><a href="https://m3.material.io/foundations/desktop/components">Material Design 3 - Desktop adaptation</a></li></ul>
+<h2>12. Risco residual</h2>
+<p>As conclusões sobre telas autenticadas são baseadas em código-fonte e julgamento especializado, não em screenshots ou DOM autenticado. Antes de implementar mudanças grandes, recomenda-se uma rodada curta de observação com dados sintéticos em ambiente isolado. O resultado do axe na tela de login não deve ser interpretado como certificação de acessibilidade do sistema inteiro.</p></main></body></html>

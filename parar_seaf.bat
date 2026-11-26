@@ -24,7 +24,8 @@ set "SEAF_PID_FILE=%SEAF_ROOT%\.seaf-pids.json"
 if not exist "%SEAF_PID_FILE%" (
     echo [SEAF] Nenhum arquivo de PIDs encontrado em:
     echo        "%SEAF_PID_FILE%"
-    echo O sistema nao parece estar em execucao pelos scripts do SEAF.
+    echo [SEAF] Verificando se ha processos residuais ocupando as portas 3001 ou 5173...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='SilentlyContinue';foreach($port in 3001,5173){$conns=Get-NetTCPConnection -LocalPort $port -State Listen;foreach($c in $conns){$proc=Get-Process -Id $c.OwningProcess;if($proc -and $proc.ProcessName -eq 'node'){Write-Host ('[SEAF] Encerrando processo residual na porta '+$port+' (PID '+$proc.Id+')...');Stop-Process -Id $proc.Id -Force;Start-Sleep -Milliseconds 300}}};Write-Host '[SEAF] Portas verificadas e liberadas.'"
     echo.
     if not defined SEAF_NO_PAUSE pause
     exit /b 0

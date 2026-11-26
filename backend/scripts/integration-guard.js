@@ -6,21 +6,22 @@ export const PRESERVED_INTEGRATION_DATABASE = 'seaf_gestao_integration';
 export const WRITABLE_INTEGRATION_DATABASE = 'seaf_gestao_integration_2';
 export const INTEGRATION_DATABASES = Object.freeze([PRESERVED_INTEGRATION_DATABASE, WRITABLE_INTEGRATION_DATABASE]);
 export const MIGRATION_NAMES = [
-  '20261111170000_init_persistence', '20261111171000_add_integrity_constraints',
-  '20261112110000_calendar_history_guards', '20261112233000_auth_mfa_sessions',
-  '20261113001000_retire_mfa_preserve_history', '20261113120000_running_clock_attachments',
+  '20261111170000_init_persistence',
+  '20261111171000_add_integrity_constraints',
+  '20261112110000_calendar_history_guards',
+  '20261112233000_auth_mfa_sessions',
+  '20261113001000_retire_mfa_preserve_history',
+  '20261113120000_running_clock_attachments',
+  '20261117120000_add_user_task_preferences',
+  '20261117200000_add_task_comments',
+  '20261118140000_add_sigadoc_process_to_tasks',
+  '20261122020000_add_task_chat_module',
+  '20261123010000_add_chat_attachment_staging',
 ];
 const fail = (message) => { throw new Error(`Integração bloqueada: ${message}`); };
 const forbiddenDatabaseNames = (probeId) => [
-  'test',
   `test_${probeId}`,
   `seaf_guard_unauthorized_${probeId}`,
-  'seaf_gestao_dev',
-  'seaf_gestao_test',
-  'seaf_gestao_recovery',
-  PRESERVED_INTEGRATION_DATABASE,
-  'mysql',
-  'phpmyadmin',
 ];
 
 function mariaDbErrorNumber(error) {
@@ -60,7 +61,7 @@ async function probeDatabaseUrl(databaseUrl, databaseName) {
   }
 }
 
-async function verifyNoUnexpectedDatabaseAccess(databaseUrl, probeDatabase) {
+export async function verifyNoUnexpectedDatabaseAccess(databaseUrl, probeDatabase) {
   const probeId = randomUUID().replaceAll('-', '');
   for (const databaseName of forbiddenDatabaseNames(probeId)) {
     let probeError;
@@ -116,8 +117,17 @@ export async function validateIntegrationConnection(client, migrations = expecte
   selectedIntegrationDatabase({ INTEGRATION_DATABASE_NAME: selectedName });
   const [server] = await client.$queryRawUnsafe('SELECT DATABASE() AS db, VERSION() AS version, @@port AS port');
   if (server?.db !== selectedName || Number(server.port) !== 3306 || !/^10\.11\.\d+-MariaDB/.test(server.version ?? '')) fail('a conexão real não corresponde ao destino e versão autorizados.');
+
+  const ALLOWED_METADATA_SCHEMAS = new Set(['information_schema', 'performance_schema']);
+  const databases = await client.$queryRawUnsafe('SHOW DATABASES');
+  const visible = databases.map((row) => Object.values(row)[0]);
+  for (const name of visible) {
+    if (name !== selectedName && !ALLOWED_METADATA_SCHEMAS.has(name)) {
+      fail(`schema não autorizado visível na conexão: "${name}". Acesso permitido exclusivamente ao banco descartável "${selectedName}" e metadados do servidor.`);
+    }
+  }
   const history = await client.$queryRawUnsafe('SELECT migration_name AS name, checksum, finished_at AS finished, rolled_back_at AS rolledBack FROM _prisma_migrations ORDER BY migration_name');
-  if (history.length !== migrations.length || migrations.length !== 6) fail('histórico deve conter exatamente as seis migrações autorizadas.');
+  if (history.length !== migrations.length || migrations.length !== 11) fail('histórico deve conter exatamente as onze migrações autorizadas.');
   for (const migration of migrations) {
     const row = history.find((item) => item.name === migration.name);
     if (!row?.finished || row.rolledBack || row.checksum !== migration.checksum) fail('histórico de migrações incompleto, divergente ou com falha.');

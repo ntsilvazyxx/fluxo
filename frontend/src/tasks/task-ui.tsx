@@ -16,11 +16,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AdvancedColorPicker } from './AdvancedColorPicker.tsx';
 import {
-  CARD_COLORS,
-  CardColorKey,
   COLOR_OPTIONS,
   getCardColorConfig,
-  isValidHex,
 } from './task-colors.ts';
 
 const statusLabels = {
